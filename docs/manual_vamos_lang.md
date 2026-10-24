@@ -216,6 +216,27 @@ funcao principal() {
 }
 ```
 
+### 5.4. Multiplicação por Acúmulo (Base 12)
+```go
+pacote principal
+
+// Multiplica 4 por 3 = 12 (+0z010 em base 12)
+funcao principal() {
+    a := 4
+    b := 3
+    produto := 0
+
+    para b > 0 {
+        produto = produto + a
+        b = b - 1
+    }
+
+    A = produto
+    escrever("Mult OK!\n")
+    parar()
+}
+```
+
 ---
 
 ## 6. Ferramentas CLI e Interface Web
@@ -238,7 +259,7 @@ python3 tools/vamos6502t.py programa.vamos --json
 
 ### 6.2. Interface Web Interativa (Porta 27005)
 
-A interface Web provê um ambiente educacional completo com três abas:
+A interface Web provê um ambiente educacional completo com quatro abas:
 
 1. **🧪 Laboratório VAMOS-T:**
    * Editor de código com realce e atalho `Ctrl+Enter` para compilação instantânea.
@@ -246,8 +267,22 @@ A interface Web provê um ambiente educacional completo com três abas:
    * Medidor de 6 lâmpadas LED tricolores refletindo os trits balanceados do Acumulador.
    * Tela CRT virtual com fósforo verde e cursor pulsante.
    * Destaque síncrono da instrução Assembly em execução.
+   * **Compartilhamento por URL (`#code=...`):** Copia um link com o código codificado em base64 Unicode para envio a alunos e professores.
 2. **📖 Manual & Exemplos:**
-   * Guia resumido da linguagem e do sistema duodecimal.
+   * Guia resumido da linguagem, aritmética duodecimal e cards didáticos prontos para execução com um clique.
+3. **🏆 Desafios Interativos (Trit Challenges):**
+   * Quatro desafios com validação automática e feedback imediato:
+     * *Desafio 1:* Inversor de sinal simétrico sem multiplicação.
+     * *Desafio 2:* Soma e representação duodecimal (`0z011`).
+     * *Desafio 3:* Contador iterativo e ativação de Flag Zero.
+     * *Desafio 4:* Classificador de 3 estados e ativação de Flag Sign.
+4. **💻 Terminal & Telemetria:**
+   * Sessão interativa direta com a CPU 6502-T em tempo real.
+
+### 6.3. Segurança para Exposição via Cloudflare
+O servidor web implementa:
+* Headers defensivos: `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`.
+* Rate limiter de 60 requisições/minuto por IP para `/api/*`, com extração de IP compatível com `CF-Connecting-IP` e `X-Forwarded-For`.
    * 5 cards práticos com o botão **`▶ Carregar no Laboratório`** para execução com um clique.
 3. **💻 Terminal & Telemetria:**
    * Sessão interativa com a CPU 6502-T em tempo real.

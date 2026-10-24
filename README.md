@@ -370,7 +370,7 @@ python3 tools/vamos6502t.py meu_codigo.vamos --json
 ```
 
 #### Laboratório Visual & Guia Interativo (Porta 27005)
-A interface web conta com três ambientes dedicados acessíveis pelo menu superior:
+A interface web conta com quatro ambientes dedicados acessíveis pelo menu superior:
 
 1. **🧪 Laboratório VAMOS-T:**
    * **Player Passo a Passo:** Botões de reprodução animada (`▶`/`⏸`), avanço/recuo passo a passo (`⏮`/`⏭`) e controle de velocidade (50ms, 150ms, 350ms).
@@ -378,20 +378,35 @@ A interface web conta com três ambientes dedicados acessíveis pelo menu superi
    * **Medidor LED de 6 Trits:** 6 lâmpadas LED com iluminação física para cada estado do Acumulador (`+1` ciano neon, `0` indigo escuro, `-1` magenta neon).
    * **Destaque no Assembly:** A instrução Assembly correspondente ao Program Counter atual é iluminada sincronizadamente durante a animação.
    * **Barra de Linha do Tempo (Slider):** Arraste para inspecionar qualquer ciclo ou instrução no tempo de execução.
+   * **🔗 Compartilhamento por Link:** O botão `🔗 Compartilhar` codifica o código-fonte na hash da URL (`#code=...`), permitindo compartilhamento instantâneo de snippets entre alunos e professores.
 
 2. **📖 Manual & Exemplos:**
    * **Fundamentos do Trit Balanceado:** Explicação didática sobre polaridade física push-pull ($-5\text{V}, 0\text{V}, +5\text{V}$) e negação simétrica sem complemento de dois.
    * **Tabela de Conversão Duodecimal:** Relação completa de pesos duodecimais (dígitos `0-9, A, B`) e prefixo `0z`.
    * **Cheatsheet da Sintaxe VAMOS-LANG:** Referência de declarações, operações, laços `para`, condicionais `se/senao` e registradores `A/X/Y`.
-   * **Cards Interativos de Demonstração:** 5 exemplos prontos com botão **`▶ Carregar no Laboratório`** para teste instantâneo:
+   * **Cards Interativos de Demonstração:** 6 exemplos prontos com botão **`▶ Carregar no Laboratório`** para teste instantâneo:
      - 🧮 *Calculadora Duodecimal:* Operações aritméticas em base 12 (`0z...`).
      - 💠 *O Poder do Trit:* Negação unária simétrica instantânea.
      - 🔄 *Contador & Somatório de Gauss:* Laço `para` acumulando valores na RAM.
      - ⚖️ *Decisão & Flags Ternárias:* Ramificação condicional e flags de Status Zero/Sign.
      - 🌟 *Olá Mundo:* Emissão sequencial de caracteres no terminal CRT.
+     - ✖️ *Multiplicação Duodecimal:* Multiplicação por acúmulo (4 x 3 = 12 / `0z010`).
 
-3. **💻 Terminal & Telemetria:**
+3. **🏆 Desafios Interativos (Trit Challenges / Quizzes):**
+   * Quatro desafios práticos graduais com **validação automática** em tempo real:
+     - *Desafio 1 (Inversor Simétrico):* Negar um número ternário sem multiplicação.
+     - *Desafio 2 (Soma Duodecimal):* Somar `0z008` + `0z005` e validar resultado duodecimal `0z011`.
+     - *Desafio 3 (Contador Regressivo):* Decrementar de 3 até 0 e ativar a Flag Zero ($Z=1$).
+     - *Desafio 4 (Classificador Ternário):* Detectar valor negativo e ativar a Flag Sign ($S=-1$).
+   * Fornece feedback instantâneo via badges de status (`Aprovado ✅` / `Falhou ❌`) e notificações toast.
+
+4. **💻 Terminal & Telemetria:**
    * Sessão interativa direta com a CPU e o monitor de memória.
+
+#### Segurança e Prontidão para Cloudflare
+O servidor Web HTTP em Go puro integra medidas de endurecimento para exposição segura na internet:
+* **Headers Defensivos:** Emissão de `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `X-XSS-Protection` e `Referrer-Policy`.
+* **Rate Limiting em Memória:** Limite defensivo de até 60 requisições por minuto por IP para as APIs (`/api/*`), com extração resiliente de IP via headers `CF-Connecting-IP` (Cloudflare) e `X-Forwarded-For`.
 
 ---
 

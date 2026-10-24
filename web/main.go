@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -338,6 +339,88 @@ func findFile(candidates []string) string {
 	return candidates[0]
 }
 
+// RateLimiter armazena histórico de requisições por IP para proteção DoS
+type RateLimiter struct {
+	mu       sync.Mutex
+	requests map[string][]time.Time
+	limit    int
+	window   time.Duration
+}
+
+func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
+	return &RateLimiter{
+		requests: make(map[string][]time.Time),
+		limit:    limit,
+		window:   window,
+	}
+}
+
+func (rl *RateLimiter) Allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	cutoff := now.Add(-rl.window)
+
+	times := rl.requests[ip]
+	var valid []time.Time
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+
+	if len(valid) >= rl.limit {
+		rl.requests[ip] = valid
+		return false
+	}
+
+	rl.requests[ip] = append(valid, now)
+	return true
+}
+
+func getClientIP(r *http.Request) string {
+	if cfIP := r.Header.Get("CF-Connecting-IP"); cfIP != "" {
+		return strings.TrimSpace(cfIP)
+	}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		if len(parts) > 0 {
+			return strings.TrimSpace(parts[0])
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		return host
+	}
+	return r.RemoteAddr
+}
+
+func securityMiddleware(next http.Handler, rl *RateLimiter) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Cabeçalhos HTTP de Segurança para exposição na Web / Cloudflare
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Content-Security-Policy", "default-src 'self' 'unsafe-inline' data:; connect-src 'self';")
+
+		// Proteção por Rate Limit nas rotas de API
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			clientIP := getClientIP(r)
+			if !rl.Allow(clientIP) {
+				w.Header().Set("Retry-After", "60")
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				_, _ = w.Write([]byte(`{"error":"Muitas requisições (Rate limit ativo). Aguarde alguns segundos.","success":false}`))
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -382,9 +465,12 @@ func main() {
 	mux.HandleFunc("/api/reset", server.handleReset)
 	mux.HandleFunc("/api/vamos", server.handleVamos)
 
+	rateLimiter := NewRateLimiter(60, time.Minute)
+	handler := securityMiddleware(mux, rateLimiter)
+
 	log.Printf("[HTTP] Servidor ouvindo na porta %s (Tokyo Night Theme)", port)
 	log.Printf("[HTTP] Interface Web disponível em: http://localhost%s", port)
-	if err := http.ListenAndServe(port, mux); err != nil {
+	if err := http.ListenAndServe(port, handler); err != nil {
 		log.Fatalf("[FATAL] Servidor HTTP finalizado com erro: %v", err)
 	}
 }
@@ -1228,6 +1314,7 @@ const indexHTML = `<!DOCTYPE html>
   <nav class="nav-tabs">
     <button class="nav-tab active" id="tab-vamos">🧪 Laboratório VAMOS-T <span style="font-size: 10px; background: var(--accent-purple); color: var(--bg-darker); padding: 1px 6px; border-radius: 10px; font-weight: 700;">VISUAL</span></button>
     <button class="nav-tab" id="tab-manual">📖 Manual &amp; Exemplos</button>
+    <button class="nav-tab" id="tab-challenges">🏆 Desafios Interativos <span style="font-size: 10px; background: var(--accent-green); color: var(--bg-darker); padding: 1px 6px; border-radius: 10px; font-weight: 700;">QUIZ</span></button>
     <button class="nav-tab" id="tab-terminal">💻 Terminal &amp; Telemetria</button>
   </nav>
 
@@ -1346,10 +1433,18 @@ const indexHTML = `<!DOCTYPE html>
             <option value="trit">💠 Exemplo 3: Trit Balanceado &amp; Negação Simétrica</option>
             <option value="loop">🔄 Exemplo 4: Loop &amp; Acúmulo (Gauss 1..5)</option>
             <option value="cond">⚖️ Exemplo 5: Flags &amp; Condicionais Ternários</option>
-            <option value="olamindo">👾 Exemplo 6: olá mindo! (Solicitação literal)</option>
+            <option value="mult">✖️ Exemplo 6: Multiplicação Duodecimal (4 x 3)</option>
+            <option value="olamindo">👾 Exemplo 7: olá mindo! (Solicitação literal)</option>
           </select>
+          <button class="btn btn-secondary" id="btn-vamos-share" title="Copiar link com código embutido para compartilhar">
+            <span>🔗 Compartilhar</span>
+          </button>
+          <button class="btn btn-secondary" id="btn-vamos-verify-active" style="display:none; border-color: var(--accent-green); color: var(--accent-green);" title="Verificar se o código cumpre os requisitos do desafio ativo">
+            <span>🏆 Validar Desafio</span>
+          </button>
         </div>
         <div class="header-badges">
+          <span class="badge" id="vamos-challenge-badge" style="display:none; border-color: var(--accent-green); color: var(--accent-green);">Desafio Ativo</span>
           <span class="badge" id="vamos-compile-status">Pronto para compilar</span>
         </div>
       </div>
@@ -1653,6 +1748,106 @@ A = invertido</div>
             <div class="manual-code-block">escrever("Olá Mundo!\n")
 parar()</div>
           </div>
+
+          <!-- Exemplo 6: Multiplicação Duodecimal -->
+          <div class="manual-card">
+            <div class="manual-card-title">
+              <span>✖️ 6. Multiplicação por Acúmulo (4 x 3)</span>
+              <button class="btn btn-step btn-load-code" data-preset="mult">▶ Carregar no Laboratório</button>
+            </div>
+            <p>Demonstra multiplicação aritmética por somas progressivas em base 12: 4 vezes 3 resulta em 12 (representado como <code>0z010</code>).</p>
+            <div class="manual-code-block">a := 4
+b := 3
+produto := 0
+para b > 0 {
+    produto = produto + a
+    b = b - 1
+}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Challenges View -->
+    <div id="view-challenges" style="display: none; padding-top: 10px;">
+      <div class="manual-hero">
+        <h2 style="font-size: 20px; color: var(--accent-cyan); display: flex; align-items: center; gap: 10px;">
+          <span>🏆</span> Laboratório de Desafios Interativos (Trit Challenges)
+        </h2>
+        <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px; line-height: 1.5;">
+          Resolva os desafios práticos de arquitetura e lógica ternária abaixo. Escreva o código em VAMOS-T, teste e submeta para validação automática com feedback instantâneo!
+        </p>
+      </div>
+
+      <div class="manual-grid" style="margin-top: 16px;">
+        <!-- Desafio 1 -->
+        <div class="manual-card" id="card-ch-1">
+          <div class="manual-card-title">
+            <span>💠 Desafio 1: Inversor Simétrico Sem Multiplicação</span>
+            <span class="badge" id="badge-ch-1" style="font-size: 11px;">Pendente</span>
+          </div>
+          <p>
+            Na lógica ternária balanceada {-1, 0, +1}, negar um número não exige multiplicação por -1 nem complemento de dois. 
+            Crie a variável <code>entrada := 0z042</code> (+50), obtenha seu inverso simétrico em <code>saida</code> (usando <code>0 - entrada</code>) e carregue em <code>A</code>.
+          </p>
+          <div class="manual-code-block">// Critério de Sucesso:
+// saida == -50 (-0z042) e A == -50</div>
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <button class="btn btn-step btn-start-challenge" data-ch="1">🚀 Carregar Desafio</button>
+            <button class="btn btn-secondary btn-verify-challenge" data-ch="1">🧪 Validar Solução</button>
+          </div>
+        </div>
+
+        <!-- Desafio 2 -->
+        <div class="manual-card" id="card-ch-2">
+          <div class="manual-card-title">
+            <span>🧮 Desafio 2: Aritmética Duodecimal (Base 12)</span>
+            <span class="badge" id="badge-ch-2" style="font-size: 11px;">Pendente</span>
+          </div>
+          <p>
+            Utilize numeração duodecimal para somar <code>num1 := 0z008</code> (8 decimal) com <code>num2 := 0z005</code> (5 decimal).
+            Armazene a soma na variável <code>total</code> e no Acumulador <code>A</code>. Em base 12, 8 + 5 = 13 (0z011).
+          </p>
+          <div class="manual-code-block">// Critério de Sucesso:
+// total == 13 (+0z011) e A == 13</div>
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <button class="btn btn-step btn-start-challenge" data-ch="2">🚀 Carregar Desafio</button>
+            <button class="btn btn-secondary btn-verify-challenge" data-ch="2">🧪 Validar Solução</button>
+          </div>
+        </div>
+
+        <!-- Desafio 3 -->
+        <div class="manual-card" id="card-ch-3">
+          <div class="manual-card-title">
+            <span>🔄 Desafio 3: Contador Regressivo com Loop</span>
+            <span class="badge" id="badge-ch-3" style="font-size: 11px;">Pendente</span>
+          </div>
+          <p>
+            Implemente um contador regressivo utilizando o laço <code>para</code>. Comece com <code>contador := 3</code> e decremente até alcançar zero (<code>contador != 0</code>). Ao final, atribua <code>A = contador</code>.
+          </p>
+          <div class="manual-code-block">// Critério de Sucesso:
+// contador == 0 (0z000), A == 0 e Flag Zero (Z) == 1</div>
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <button class="btn btn-step btn-start-challenge" data-ch="3">🚀 Carregar Desafio</button>
+            <button class="btn btn-secondary btn-verify-challenge" data-ch="3">🧪 Validar Solução</button>
+          </div>
+        </div>
+
+        <!-- Desafio 4 -->
+        <div class="manual-card" id="card-ch-4">
+          <div class="manual-card-title">
+            <span>⚖️ Desafio 4: Classificador Ternário de Três Estados</span>
+            <span class="badge" id="badge-ch-4" style="font-size: 11px;">Pendente</span>
+          </div>
+          <p>
+            Dado o valor <code>alvo := -25</code>, utilize uma estrutura de decisão <code>se / senao</code> para atribuir à variável <code>classe</code> e ao Acumulador <code>A</code> o valor <code>-1</code> se o número for negativo, ou <code>1</code> caso contrário.
+          </p>
+          <div class="manual-code-block">// Critério de Sucesso:
+// classe == -1, A == -1 e Flag Sign (S) == -1</div>
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <button class="btn btn-step btn-start-challenge" data-ch="4">🚀 Carregar Desafio</button>
+            <button class="btn btn-secondary btn-verify-challenge" data-ch="4">🧪 Validar Solução</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1870,32 +2065,87 @@ parar()</div>
         }
       });
 
+      // Toast notification helper
+      function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        const toast = document.createElement('div');
+        toast.style.pointerEvents = 'auto';
+        toast.style.padding = '12px 18px';
+        toast.style.borderRadius = '8px';
+        toast.style.fontSize = '13px';
+        toast.style.fontWeight = '500';
+        toast.style.boxShadow = '0 8px 24px rgba(0,0,0,0.5)';
+        toast.style.display = 'flex';
+        toast.style.alignItems = 'center';
+        toast.style.gap = '8px';
+        toast.style.transition = 'all 0.3s ease';
+        toast.style.transform = 'translateY(20px)';
+        toast.style.opacity = '0';
+
+        if (type === 'success') {
+          toast.style.background = '#1a2b27';
+          toast.style.border = '1px solid var(--accent-green)';
+          toast.style.color = 'var(--accent-green)';
+        } else if (type === 'error') {
+          toast.style.background = '#2c1e28';
+          toast.style.border = '1px solid var(--accent-red)';
+          toast.style.color = 'var(--accent-red)';
+        } else {
+          toast.style.background = '#1f2335';
+          toast.style.border = '1px solid var(--accent-cyan)';
+          toast.style.color = 'var(--accent-cyan)';
+        }
+
+        toast.innerHTML = message;
+        container.appendChild(toast);
+
+        requestAnimationFrame(() => {
+          toast.style.transform = 'translateY(0)';
+          toast.style.opacity = '1';
+        });
+
+        setTimeout(() => {
+          toast.style.transform = 'translateY(20px)';
+          toast.style.opacity = '0';
+          setTimeout(() => toast.remove(), 300);
+        }, 4000);
+      }
+
       // Tab Navigation
       const tabVamos = document.getElementById('tab-vamos');
       const tabManual = document.getElementById('tab-manual');
+      const tabChallenges = document.getElementById('tab-challenges');
       const tabTerminal = document.getElementById('tab-terminal');
       const viewVamos = document.getElementById('view-vamos');
       const viewManual = document.getElementById('view-manual');
+      const viewChallenges = document.getElementById('view-challenges');
       const viewTerminal = document.getElementById('view-terminal');
 
       function switchTab(target) {
         tabVamos.classList.toggle('active', target === 'vamos');
         tabManual.classList.toggle('active', target === 'manual');
+        if (tabChallenges) tabChallenges.classList.toggle('active', target === 'challenges');
         tabTerminal.classList.toggle('active', target === 'terminal');
 
         viewVamos.style.display = (target === 'vamos') ? 'block' : 'none';
         viewManual.style.display = (target === 'manual') ? 'block' : 'none';
+        if (viewChallenges) viewChallenges.style.display = (target === 'challenges') ? 'block' : 'none';
         viewTerminal.style.display = (target === 'terminal') ? 'block' : 'none';
       }
 
       tabVamos.addEventListener('click', () => switchTab('vamos'));
       tabManual.addEventListener('click', () => switchTab('manual'));
+      if (tabChallenges) tabChallenges.addEventListener('click', () => switchTab('challenges'));
       tabTerminal.addEventListener('click', () => switchTab('terminal'));
 
       // VAMOS-LANG Playground & Visualizer
       const vamosCode = document.getElementById('vamos-code');
       const vamosPresets = document.getElementById('vamos-presets');
       const btnVamosRun = document.getElementById('btn-vamos-run');
+      const btnVamosShare = document.getElementById('btn-vamos-share');
+      const btnVamosVerifyActive = document.getElementById('btn-vamos-verify-active');
+      const vamosChallengeBadge = document.getElementById('vamos-challenge-badge');
       const vamosCompileStatus = document.getElementById('vamos-compile-status');
       const vamosAsmOutput = document.getElementById('vamos-asm-output');
       const vamosAsmBadge = document.getElementById('vamos-asm-badge');
@@ -1921,14 +2171,194 @@ parar()</div>
       const vTtyBadge = document.getElementById('v-tty-badge');
       const vTritValue = document.getElementById('v-trit-value');
 
+      let activeChallengeId = null;
+
       const presets = {
         ola: "pacote principal\n\n// Exemplo VAMOS-T: Olá Mundo na CPU Ternária 6502-T\n// Emite cada caractere via MMIO (Porta 300 / 0z210) no Barramento de 6 Trits\nfuncao principal() {\n    escrever(\"Olá Mundo!\\n\")\n    parar()\n}",
         calc: "pacote principal\n\n// Exemplo VAMOS-T: Calculadora Duodecimal (Base 12) no 6502-T\n// Demonstra soma e subtração com literais duodecimais 0z...\nfuncao principal() {\n    // 0z010 = 12 em decimal, 0z005 = 5 em decimal\n    num1 := 0z010\n    num2 := 0z005\n\n    // Soma: 12 + 5 = 17 (em base 12: 0z015)\n    soma := num1 + num2\n\n    // Subtração: 17 - 8 = 9 (0z009)\n    resultado := soma - 0z008\n\n    A = resultado\n    escrever(\"Calc Base 12: OK!\\n\")\n    parar()\n}",
         trit: "pacote principal\n\n// Exemplo VAMOS-T: Lógica Ternária Balanceada {-1, 0, +1}\n// Demonstra negação unária simétrica e flags de sinal\nfuncao principal() {\n    // Carrega um valor positivo (+50 decimal / 0z042)\n    valor := 0z042\n\n    // Inversão simétrica sem complemento de dois!\n    invertido := 0 - valor\n\n    A = invertido\n    escrever(\"Trit Balanceado Simetrico!\\n\")\n    parar()\n}",
         loop: "pacote principal\n\n// Exemplo VAMOS-T: Loop de Contagem e Acúmulo no 6502-T\nfuncao principal() {\n    limite := 5\n    total := 0\n    i := 0\n\n    para i < limite {\n        total = total + i\n        i = i + 1\n    }\n\n    A = total\n    parar()\n}",
         cond: "pacote principal\n\n// Exemplo VAMOS-T: Lógica Condicional e Flags Ternárias\nfuncao principal() {\n    alvo := -12\n    status := 0\n\n    se alvo < 0 {\n        status = -1\n    } senao {\n        status = 1\n    }\n\n    A = status\n    parar()\n}",
+        mult: "pacote principal\n\n// Exemplo VAMOS-T: Multiplicação Aritmética por Acúmulo no 6502-T\n// Multiplica a (4) por b (3) = 12 (0z010 em base 12)\nfuncao principal() {\n    a := 4\n    b := 3\n    produto := 0\n\n    para b > 0 {\n        produto = produto + a\n        b = b - 1\n    }\n\n    A = produto\n    escrever(\"Mult OK!\\n\")\n    parar()\n}",
         olamindo: "pacote principal\n\n// Exemplo VAMOS-T: olá mindo! (Solicitação literal)\nfuncao principal() {\n    escrever(\"olá mindo!\\n\")\n    parar()\n}"
       };
+
+      const challenges = {
+        1: {
+          title: "Inversor Simétrico Sem Multiplicação",
+          code: "pacote principal\n\n// DESAFIO 1: Inversor Simétrico Sem Multiplicação\n// Obtenha o inverso simétrico de 'entrada' na variável 'saida' e no Acumulador A.\nfuncao principal() {\n    entrada := 0z042 // +50 decimal\n    \n    // Seu código aqui (inversão simétrica 0 - entrada):\n    saida := 0 - entrada\n    \n    A = saida\n    parar()\n}",
+          validator: (exec) => {
+            const v = exec.variables || {};
+            if (v.saida && v.saida.decimal === -50 && exec.acc === -50) {
+              return { ok: true, msg: "🎉 Parabéns! Simetria ternária perfeita: +50 invertido para -50 sem complemento de dois!" };
+            }
+            return { ok: false, msg: "Critério não atendido. Esperado 'saida' = -50 e A = -50. Atual: saida = " + (v.saida ? v.saida.decimal : "não definida") + ", A = " + exec.acc };
+          }
+        },
+        2: {
+          title: "Aritmética Duodecimal (Base 12)",
+          code: "pacote principal\n\n// DESAFIO 2: Aritmética Duodecimal (Base 12)\n// Some num1 (0z008) com num2 (0z005) e armazene na variável 'total' e em A.\nfuncao principal() {\n    num1 := 0z008\n    num2 := 0z005\n    \n    // Seu código aqui:\n    total := num1 + num2\n    \n    A = total\n    parar()\n}",
+          validator: (exec) => {
+            const v = exec.variables || {};
+            if (v.total && v.total.decimal === 13 && exec.acc === 13) {
+              return { ok: true, msg: "🎉 Excelente! 8 + 5 = 13 (0z011 em base 12). Aritmética duodecimal validada!" };
+            }
+            return { ok: false, msg: "Critério não atendido. Esperado 'total' = 13 (+0z011). Atual: total = " + (v.total ? v.total.decimal : "não definida") + ", A = " + exec.acc };
+          }
+        },
+        3: {
+          title: "Contador Regressivo com Loop",
+          code: "pacote principal\n\n// DESAFIO 3: Contador Regressivo com Loop\n// Decremente 'contador' de 3 até 0 usando 'para' e carregue o resultado em A.\nfuncao principal() {\n    contador := 3\n    \n    // Seu código aqui:\n    para contador != 0 {\n        contador--\n    }\n    \n    A = contador\n    parar()\n}",
+          validator: (exec) => {
+            const v = exec.variables || {};
+            if (v.contador && v.contador.decimal === 0 && exec.acc === 0 && exec.flag_zero) {
+              return { ok: true, msg: "🎉 Muito bem! Laço iterativo completado e Flag Zero (Z=1) ativada!" };
+            }
+            return { ok: false, msg: "Critério não atendido. Esperado 'contador' = 0 e Flag Z=1. Atual: contador = " + (v.contador ? v.contador.decimal : "não definida") };
+          }
+        },
+        4: {
+          title: "Classificador Ternário de Três Estados",
+          code: "pacote principal\n\n// DESAFIO 4: Classificador Ternário de Três Estados\n// Classifique 'alvo' (-25): defina 'classe' como -1 se for negativo, ou +1 se não.\nfuncao principal() {\n    alvo := -25\n    classe := 0\n    \n    // Seu código aqui:\n    se alvo < 0 {\n        classe = -1\n    } senao {\n        classe = 1\n    }\n    \n    A = classe\n    parar()\n}",
+          validator: (exec) => {
+            const v = exec.variables || {};
+            if (v.classe && v.classe.decimal === -1 && exec.acc === -1 && exec.flag_sign === -1) {
+              return { ok: true, msg: "🎉 Espetacular! Classificador ternário executado e Flag Sign (S=-1) confirmada!" };
+            }
+            return { ok: false, msg: "Critério não atendido. Esperado 'classe' = -1 e Flag S=-1. Atual: classe = " + (v.classe ? v.classe.decimal : "não definida") + ", Flag S = " + exec.flag_sign };
+          }
+        }
+      };
+
+      function startChallenge(chId) {
+        const ch = challenges[chId];
+        if (!ch) return;
+        activeChallengeId = chId;
+        vamosCode.value = ch.code;
+        if (vamosChallengeBadge) {
+          vamosChallengeBadge.textContent = 'Desafio ' + chId + ' Ativo';
+          vamosChallengeBadge.style.display = 'inline-block';
+        }
+        if (btnVamosVerifyActive) {
+          btnVamosVerifyActive.style.display = 'inline-block';
+        }
+        switchTab('vamos');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        showToast('🎯 Desafio ' + chId + ' carregado no editor! Escreva o código e clique em "Validar Desafio".', 'info');
+        runVamos(true);
+      }
+
+      async function verifyChallenge(chId) {
+        const ch = challenges[chId];
+        if (!ch) return;
+
+        showToast('Validando desafio ' + chId + '...', 'info');
+        const code = vamosCode.value.trim();
+        if (!code) return;
+
+        try {
+          const res = await fetch('/api/vamos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source: code })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            showToast('Erro de compilação: ' + (data.error || 'Falha ao compilar'), 'error');
+            const b = document.getElementById('badge-ch-' + chId);
+            if (b) {
+              b.textContent = 'Erro ❌';
+              b.style.borderColor = 'var(--accent-red)';
+              b.style.color = 'var(--accent-red)';
+            }
+            return;
+          }
+
+          const result = ch.validator(data.execution || {});
+          const b = document.getElementById('badge-ch-' + chId);
+          if (result.ok) {
+            showToast(result.msg, 'success');
+            if (b) {
+              b.textContent = 'Aprovado ✅';
+              b.style.borderColor = 'var(--accent-green)';
+              b.style.color = 'var(--accent-green)';
+            }
+          } else {
+            showToast(result.msg, 'error');
+            if (b) {
+              b.textContent = 'Falhou ❌';
+              b.style.borderColor = 'var(--accent-yellow)';
+              b.style.color = 'var(--accent-yellow)';
+            }
+          }
+        } catch (e) {
+          showToast('Erro de conexão ao validar desafio.', 'error');
+        }
+      }
+
+      document.querySelectorAll('.btn-start-challenge').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const chId = btn.getAttribute('data-ch');
+          if (chId) startChallenge(chId);
+        });
+      });
+
+      document.querySelectorAll('.btn-verify-challenge').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const chId = btn.getAttribute('data-ch');
+          if (chId) verifyChallenge(chId);
+        });
+      });
+
+      if (btnVamosVerifyActive) {
+        btnVamosVerifyActive.addEventListener('click', () => {
+          if (activeChallengeId) verifyChallenge(activeChallengeId);
+        });
+      }
+
+      if (btnVamosShare) {
+        btnVamosShare.addEventListener('click', () => {
+          const code = vamosCode.value;
+          try {
+            const b64 = btoa(encodeURIComponent(code).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode('0x' + p1)));
+            const newUrl = window.location.origin + window.location.pathname + '#code=' + b64;
+            history.replaceState(null, '', newUrl);
+            navigator.clipboard.writeText(newUrl).then(() => {
+              showToast('🔗 Link copiado para a área de transferência!', 'success');
+            }).catch(() => {
+              prompt('Copie o link abaixo:', newUrl);
+            });
+          } catch (e) {
+            showToast('Erro ao gerar link de compartilhamento.', 'error');
+          }
+        });
+      }
+
+      function checkUrlParams() {
+        const hash = window.location.hash;
+        if (hash.startsWith('#code=')) {
+          try {
+            const b64 = hash.substring(6);
+            const raw = decodeURIComponent(Array.prototype.map.call(atob(b64), c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+            if (raw && raw.trim()) {
+              vamosCode.value = raw;
+              switchTab('vamos');
+              showToast('📥 Código carregado a partir do link compartilhado!', 'info');
+              runVamos(true);
+              return true;
+            }
+          } catch (e) {
+            console.error('Erro ao decodificar hash da URL', e);
+          }
+        } else if (hash.startsWith('#ch=')) {
+          const chId = hash.substring(4);
+          if (challenges[chId]) {
+            startChallenge(chId);
+            return true;
+          }
+        }
+        return false;
+      }
 
       // Load code from manual cards
       document.querySelectorAll('.btn-load-code').forEach(btn => {
@@ -2197,10 +2627,14 @@ parar()</div>
         }
       });
 
-      // Auto-compile default preset on startup
-      runVamos(false);
+      // Auto-compile default preset on startup unless URL hash contains code/challenge
+      if (!checkUrlParams()) {
+        runVamos(false);
+      }
     })();
   </script>
+  <!-- Toast Notifications Container -->
+  <div id="toast-container" style="position: fixed; bottom: 30px; right: 30px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;"></div>
 </body>
 </html>
 `
