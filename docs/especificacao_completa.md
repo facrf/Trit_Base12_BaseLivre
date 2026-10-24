@@ -1426,6 +1426,33 @@ if __name__ == "__main__":
     sys.exit(0 if run_tests() else 1)
 ```
 
+### 8.5. Compilador VAMOS-T (`tools/vamos6502t.py`)
+O compilador VAMOS-T traduz a linguagem de alto nível VAMOS-LANG ([facrf/VAMOSLANG](https://github.com/facrf/VAMOSLANG)) diretamente para instruções assembly do 6502-T.
+
+* **Layout de Memória Padrão:**
+  * Segmento de Código: `$000` a `$179` ($0$ a $179$).
+  * Variáveis na RAM: `$180` a `$299` ($180$ a $299$).
+  * Porta MMIO TTY Virtual: `$300` / `0z210`.
+* **Funcionalidades:**
+  * Suporte a literais em Base 12 (`0z...`) e inteiros decimais.
+  * Alocação automática de variáveis escalares na RAM.
+  * Estruturas de controle `se / senao` (mapeadas para `BEQ`, `BNE`, `BMI`, `BPL`) e `para` (laços iterativos).
+  * Streaming de strings via MMIO na porta 300 através da chamada nativa `escrever(...)`.
+  * Emissão estruturada em JSON com trace ciclo a ciclo para integração com a interface web.
+
+### 8.6. Interface Web HTTP, Emulação Visual e Telemetria (`web/main.go`)
+Frontend web moderno desenvolvido em Go puro (sem dependências externas) estilizado sob a paleta **Tokyo Night**:
+* **Servidor HTTP:** Escuta na porta `27005`, servindo uma SPA autossuficiente.
+* **Quatro Ambientes Dedicados:**
+  1. *Laboratório VAMOS-T:* Editor de código, reprodução animada passo a passo, console CRT TTY com fósforo verde, medidor LED de 6 trits físicos e rastreamento síncrono do Program Counter.
+  2. *Manual & Didática:* Guia de conversão duodecimal, tabela de pesos e cards didáticos interativos com carregamento em um clique.
+  3. *Desafios Interativos (Trit Challenges):* Quizzes práticos com validação automática das flags e variáveis.
+  4. *Terminal & Telemetria:* Sessão interativa com a CPU e o monitor de memória.
+* **Segurança e Cloudflare Readiness:**
+  * Injeção de headers defensivos (`Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`).
+  * Rate limiter ativo em memória (60 req/min por IP) compatível com cabeçalhos `CF-Connecting-IP` e `X-Forwarded-For`.
+  * Compartilhamento de snippets de código via URL hash (`#code=base64...`).
+
 ---
 
 ## 9. Infraestrutura de Hardware e Síntese FPGA
