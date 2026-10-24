@@ -1,0 +1,30 @@
+# Bytecode Python e Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Artefatos Vivado e FPGA
+build/
+*.bit
+*.dcp
+*.rpt
+*.jou
+*.log
+.Xil/
+hd_visual/
+fsm_encoding.os
+
+# Simulação e Formatos Intermediários
+*.vvp
+*.vcd
+*.mem
+*.hex
+
+# Ambientes Locais e IDEs
+.venv/
+env/
+.vscode/
+.idea/
+*.swp
+*~
