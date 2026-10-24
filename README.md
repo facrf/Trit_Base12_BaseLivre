@@ -28,6 +28,7 @@
   - [5.1. Montagem de Programas Assembly](#51-montagem-de-programas-assembly)
   - [5.2. Desassemblagem e Engenharia Reversa](#52-desassemblagem-e-engenharia-reversa)
   - [5.3. Execução Interativa no Emulador Ciclo a Ciclo](#53-execução-interativa-no-emulador-ciclo-a-ciclo)
+  - [5.4. Interface Web Interativa (Tokyo Night) e Docker](#54-interface-web-interativa-tokyo-night-e-docker)
 - [6. Execução da Suite de Testes Automatizada](#6-execução-da-suite-de-testes-automatizada)
 - [7. Estrutura do Repositório](#7-estrutura-do-repositório)
 - [8. Referências Acadêmicas](#8-referências-acadêmicas)
@@ -303,6 +304,36 @@ Comandos no console interativo do emulador:
 * `r`: Reseta a CPU aos valores iniciais.
 * `q`: Encerra o emulador.
 
+### 5.4. Interface Web Interativa (Tokyo Night) e Docker
+
+Para facilitar a depuração visual e o controle da CPU sem a necessidade de um terminal local dedicado, o projeto conta com um **frontend web em Go puro** (porta `:27005`) estilizado no tema **Tokyo Night** (`#1a1b26`, `#7dcfff`, `#bb9af7`), empacotado em um container Docker multi-stage leve:
+
+* **Telemetria em Tempo Real:** Painel com cartões dinâmicos exibindo Ciclos, Estado da FSM (`FETCH_OPCODE`, `DECODE`, `EXECUTE`), Program Counter (PC), Acumulador (A), Registradores X/Y e Flags Ternárias $[Z \mid S \mid O]$ em Decimal, Trits e Base 12.
+* **Barra de Ações Rápidas:**
+  * `Step (Ciclo)` (`s` ou tecla `Space`): Avança 1 ciclo de clock.
+  * `Instrução` (`i` ou tecla `I`): Avança até a conclusão da instrução atual.
+  * `Run (Cont)` (`c` ou tecla `C`): Executa continuamente até 2.000 ciclos ou atingir um breakpoint.
+  * `Dump RAM` (`m 0 32` ou tecla `M`): Inspeciona posições de memória.
+  * `Reset CPU` (tecla `R`): Reinicia o processo da CPU e recarrega `build/program.mem`.
+* **Terminal Interativo:** Console com histórico de comandos (navegação via setas `↑` e `↓`), atalhos de teclado globais, auto-scroll e cópia para área de transferência.
+* **Endpoints da API HTTP:**
+  * `GET /`: Servidor do SPA HTML5/CSS3/JavaScript embarcado.
+  * `POST /api/cmd`: Envia comando ao sub-processo do emulador e retorna a resposta de texto (ou JSON via cabeçalho `Accept: application/json`).
+  * `GET /api/cmd`: Retorna o buffer atual da CPU sem avançar o clock.
+  * `POST /api/reset`: Reinicializa o processo da CPU 6502-T.
+
+#### Compilação e Execução via Docker / Makefile
+
+```bash
+# 1. Compila a imagem Docker multi-stage (golang:alpine -> python:3.12-alpine)
+make web-build
+
+# 2. Inicia o container com a porta 27005 mapeada
+make web-run
+```
+
+Acesse no navegador: **`http://localhost:27005`**
+
 ---
 
 ## 6. Execução da Suite de Testes Automatizada
@@ -358,6 +389,10 @@ Trit_Base12_BaseLivre/
 │   └── build_bitstream.tcl      # Script em lote para síntese no Vivado
 ├── src_asm/                     # Programas Assembly de demonstração
 │   └── program.s                # Código fonte exemplo em base 12
+├── web/                         # Frontend Web HTTP em Go (Tema Tokyo Night)
+│   ├── go.mod                   # Definição do módulo Go
+│   └── main.go                  # Servidor web, piping de sub-processo e SPA
+├── Dockerfile.web               # Multi-stage build (golang:alpine -> python:3.12-alpine)
 ├── Makefile                     # Orquestrador unificado de build e testes
 ├── AGENTS.md                    # Diretrizes e convenções para agentes de IA
 ├── CITATION.cff                 # Metadados acadêmicos de citação

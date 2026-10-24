@@ -33,7 +33,12 @@ BITSTREAM     := $(BUILD_DIR)/fpga_test_top.bit
 RTL_SRCS      := $(wildcard $(RTL_DIR)/*.v)
 SIM_TB        := sim/tb_system_dozenal_monitor.v
 
-.PHONY: all test asm disasm emu sim bitstream program clean help
+# Configurações Docker Web
+DOCKER_IMAGE  := facrf/6502t-web:latest
+DOCKER_NAME   := 6502t_web
+WEB_PORT      := 27005
+
+.PHONY: all test asm disasm emu sim bitstream program clean help web-build web-run
 
 # Alvo padrão: executa a suite de testes e monta o programa de exemplo
 all: test asm
@@ -95,6 +100,18 @@ program: $(BITSTREAM)
 	   disconnect_hw_server;"
 
 # ==============================================================================
+# FRONTEND WEB & CONTAINER DOCKER (PORTA 27005)
+# ==============================================================================
+web-build: asm
+	@echo "===> [DOCKER] Construindo imagem $(DOCKER_IMAGE)..."
+	docker build -f Dockerfile.web -t $(DOCKER_IMAGE) .
+
+web-run:
+	@echo "===> [DOCKER] Subindo container $(DOCKER_NAME)..."
+	@docker rm -f $(DOCKER_NAME) 2>/dev/null || true
+	docker run -d --name $(DOCKER_NAME) -p $(WEB_PORT):$(WEB_PORT) $(DOCKER_IMAGE)
+
+# ==============================================================================
 # DIRETÓRIOS E LIMPEZA
 # ==============================================================================
 $(BUILD_DIR):
@@ -110,6 +127,8 @@ help:
 	@echo "  make asm        - Compila src_asm/program.s para build/program.mem"
 	@echo "  make disasm     - Desassembla o binário build/program.mem"
 	@echo "  make emu        - Inicia o emulador ciclo a ciclo interativo"
+	@echo "  make web-build  - Constrói imagem Docker facrf/6502t-web:latest"
+	@echo "  make web-run    - Executa container Docker na porta 27005"
 	@echo "  make sim        - Compila e roda o testbench RTL no Icarus Verilog"
 	@echo "  make bitstream  - Executa síntese, place, route e gera .bit no Vivado"
 	@echo "  make program    - Grava o bitstream diretamente na FPGA via JTAG"

@@ -55,6 +55,10 @@ Trit_Base12_BaseLivre/
 │   └── build_bitstream.tcl      # Síntese em lote para Xilinx Vivado (FPGA Artix-7)
 ├── src_asm/                     # Programas Assembly de demonstração
 │   └── program.s                # Código fonte de exemplo
+├── web/                         # Frontend Web em Go puro (Tema Tokyo Night)
+│   ├── go.mod                   # Módulo Go
+│   └── main.go                  # Servidor HTTP na porta 27005 e SPA embutido
+├── Dockerfile.web               # Multi-stage Docker (golang:alpine -> python:3.12-alpine)
 ├── Makefile                     # Orquestrador padrão de comandos
 ├── AGENTS.md                    # Este guia operacional para LLMs
 ├── CITATION.cff                 # Citação acadêmica formal
@@ -96,6 +100,11 @@ Trit_Base12_BaseLivre/
   ```
 * **FSM Síncrona:** FSMs devem ser acionadas na borda de subida do clock (`always @(posedge clk or posedge rst)`) com reset previsível.
 
+### 3.3. Servidor Web Go (`web/`)
+* **Padrão:** Go 1.22+ puro (biblioteca padrão `net/http`, `os/exec`, `sync`). Evitar frameworks pesados externos.
+* **Tema Visual:** Estilização baseada na paleta oficial **Tokyo Night** (`#1a1b26`, `#24283b`, `#7dcfff`, `#bb9af7`), tipografia monoespaçada e telemetria dinâmica.
+* **Comunicação Subprocesso:** Sempre sincronizar acesso ao stdin/stdout do emulador Python via `sync.Mutex` com deadlines (`SetReadDeadline`) para evitar travamento em concorrência.
+
 ---
 
 ## 4. Comandos Padrão para Teste e Validação
@@ -129,7 +138,19 @@ make disasm
 python3 tools/emu6502t.py build/program.mem --autorun --cycles 60 --dump
 ```
 
-### 4.4. Limpeza de Artefatos Temporários
+### 4.4. Frontend Web e Containerização Docker
+```bash
+# Constrói a imagem Docker facrf/6502t-web:latest
+make web-build
+
+# Sobe o container em background na porta 27005
+make web-run
+
+# Valida endpoint HTTP
+curl -s http://localhost:27005/api/cmd
+```
+
+### 4.5. Limpeza de Artefatos Temporários
 ```bash
 make clean
 ```

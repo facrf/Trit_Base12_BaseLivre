@@ -1,0 +1,30 @@
+# ==============================================================================
+# Multi-stage Dockerfile para 6502-T Web Frontend (Tokyo Night)
+# ==============================================================================
+
+# Stage 1: Build do servidor web em Go
+FROM golang:alpine AS builder
+
+WORKDIR /src
+COPY web/ ./web/
+
+WORKDIR /src/web
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /bin/6502t-web main.go
+
+# Stage 2: Runtime com Python 3.12 Alpine
+FROM python:3.12-alpine
+
+WORKDIR /app
+
+# Copia binário compilado no stage builder
+COPY --from=builder /bin/6502t-web /app/6502t-web
+
+# Copia diretórios do emulador e artefatos de memória
+COPY tools/ /app/tools/
+COPY build/ /app/build/
+
+# Porta do serviço web
+EXPOSE 27005
+
+# Inicia o servidor web
+ENTRYPOINT ["/app/6502t-web"]
