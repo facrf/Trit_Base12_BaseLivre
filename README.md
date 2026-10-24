@@ -339,6 +339,9 @@ Acesse no navegador: **`http://localhost:27005`**
 
 O 6502-T integra um compilador e transpiler para a linguagem **VAMOS-LANG** ([facrf/VAMOSLANG](https://github.com/facrf/VAMOSLANG)), uma linguagem com sintaxe no estilo Go em português brasileiro adaptada para o conjunto de instruções ternário balanceado e barramentos de 6 trits.
 
+> [!TIP]
+> Consulte o manual detalhado em **[`docs/manual_vamos_lang.md`](docs/manual_vamos_lang.md)** para referência completa de palavras-chave, layout de memória RAM (`$180..$299`), porta MMIO (`$300`), operadores de desvio e cards didáticos.
+
 #### Exemplo em VAMOS-T: "Olá Mundo!" com Saída MMIO
 ```go
 pacote principal
@@ -457,6 +460,7 @@ Trit_Base12_BaseLivre/
 │   ├── base_conceitual.md       # Fundamentação física e matemática
 │   ├── especificacao_completa.md# Especificação detalhada da CPU e RTLs Verilog
 │   ├── manual_emulador.md       # Manual de operação do emulador ciclo a ciclo
+│   ├── manual_vamos_lang.md     # Manual de referência da linguagem VAMOS-T e laboratório web
 │   ├── simulacao.md             # Guia de simulação e formas de onda
 │   ├── tese_antitese.md         # Análise comparativa Ternário vs Binário
 │   └── assets/                  # Diagramas esquemáticos e imagens

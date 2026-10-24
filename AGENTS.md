@@ -64,6 +64,7 @@ Trit_Base12_BaseLivre/
 │   ├── base_conceitual.md       # Fundamentos da física do trit e constante de Euler (e)
 │   ├── especificacao_completa.md# Especificação formal da CPU, ISA e RTL
 │   ├── manual_emulador.md       # Manual de operação do emulador ciclo a ciclo
+│   ├── manual_vamos_lang.md     # Manual de referência da linguagem VAMOS-T e laboratório web
 │   ├── simulacao.md             # Guia de simulação de hardware
 │   ├── tese_antitese.md         # Confronto técnico binário vs. ternário
 │   └── assets/                  # Esquemas e diagramas
