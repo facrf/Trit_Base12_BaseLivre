@@ -226,6 +226,10 @@ class CPU6502T:
                     self.flag_sign = 0 if self.acc == 0 else (1 if self.acc > 0 else -1)
                 elif op == (0, 1):    # TAY
                     self.reg_y = self.acc
+                elif op == (0, -1):   # TYA
+                    self.acc = self.reg_y
+                    self.flag_zero = (self.acc == 0)
+                    self.flag_sign = 0 if self.acc == 0 else (1 if self.acc > 0 else -1)
 
             # 3. Saltos de Fluxo (Grupo -1, -1)
             elif group == (-1, -1):
@@ -233,6 +237,8 @@ class CPU6502T:
                     self.pc = self.target_addr
                 elif op == (-1, 1):   # BEQ
                     if self.flag_zero: self.pc = self.target_addr
+                elif op == (1, -1):   # BNE
+                    if not self.flag_zero: self.pc = self.target_addr
                 elif op == (0, -1):   # BMI
                     if self.flag_sign == -1: self.pc = self.target_addr
                 elif op == (0, 1):    # BPL
@@ -505,7 +511,7 @@ def main():
             cpu.step_cycle()
         debugger.print_status()
         if args.dump:
-            debugger.dump_memory(0, min(args.size, 32))
+            debugger.dump_memory(0, args.size)
     else:
         debugger.run()
 

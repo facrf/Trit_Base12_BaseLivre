@@ -1,451 +1,198 @@
-#!/usr/bin/env python3
-"""
-Emulador Ciclo a Ciclo da CPU Ternária 6502-T
-Suporte a carga via CLI de arquivos .mem, .hex e arquivos Verilog.
-Mapeamento: -1 -> 2'b00, 0 -> 2'b01, +1 -> 2'b10
-"""
+# Manual de Operação e Referência: Emulador Ciclo a Ciclo 6502-T
 
-import sys
-import os
-import re
-import argparse
-from typing import List, Tuple, Dict, Optional
+> **Módulo:** `tools/emu6502t.py`  
+> **Arquitetura:** Microprocessador MOS 6502 Ternário Balanceado $\{-1, 0, +1\}$  
+> **Abstração Numérica:** Aritmética Duodecimal (Base 12) e Decimal  
 
-# =====================================================================
-# MATEMÁTICA E CONVERSÕES TERNÁRIAS BALANCEADAS / BASE 12
-# =====================================================================
+---
 
-TRIT_CHARS = {-1: "-", 0: "0", 1: "+"}
-CHAR_TO_TRIT = {"-": -1, "0": 0, "+": 1}
+## 1. Visão Geral
 
-def int_to_trits(val: int, length: int = 6) -> List[int]:
-    """Converte inteiro decimal para lista de trits balanceados [T0..T(n-1)]."""
-    trits = []
-    n = val
-    for _ in range(length):
-        rem = n % 3
-        if rem == 2:
-            trits.append(-1)
-            n = (n // 3) + 1
-        elif rem == 1:
-            trits.append(1)
-            n = n // 3
-        else:
-            trits.append(0)
-            n = n // 3
-    return trits
+O emulador **6502-T** (`tools/emu6502t.py`) é uma ferramenta de depuração de nível de microarquitetura, projetada para reproduzir fielmente o comportamento elétrico e lógico do processador ternário balanceado. Diferente de emuladores que apenas interpretam opcodes em nível funcional, o 6502-T modela:
 
-def trits_to_int(trits: List[int]) -> int:
-    """Calcula o inteiro decimal correspondente à lista de trits."""
-    return sum(t * (3**i) for i, t in enumerate(trits))
+* A **FSM interna de 5 estados** (idêntica ao RTL Verilog `instruction_decoder_6502t.v`).
+* Os **barramentos físicos** (dados de 6 trits / 12 bits; endereçamento linear de 10 trits / 20 bits).
+* A **ALU balanceada** com saturação modular $[-364, +364]$ e flags nativas.
+* A telemetria simultânea em **Trits Físicos** ($\{-, 0, +\}$), **Base 12** (`0z...`) e **Decimal**.
 
-def trits_to_str(trits: List[int]) -> str:
-    """Gera string de visualização física (MST -> LST)."""
-    return "".join(TRIT_CHARS[t] for t in reversed(trits))
+---
 
-def int_to_dozenal(val: int) -> str:
-    """Converte inteiro para representação duodecimal formatada com sinal."""
-    if val == 0:
-        return " 0z000"
-    sign_str = "-" if val < 0 else "+"
-    v = abs(val)
-    d2 = (v // 144) % 12
-    d1 = (v // 12) % 12
-    d0 = v % 12
-    chars = "0123456789AB"
-    return f"{sign_str}0z{chars[d2]}{chars[d1]}{chars[d0]}"
+## 2. Instalação e Requisitos
 
-def bin12_to_trits(bin_str: str) -> List[int]:
-    """Decodifica palavra Verilog de 12 bits para trits [T0..T5]."""
-    bin_str = bin_str.replace("12'b", "").replace("_", "").strip()
-    map_2bit = {"00": -1, "01": 0, "10": 1}
-    t = [map_2bit[bin_str[i:i+2]] for i in range(0, 12, 2)]
-    return list(reversed(t))
+* **Python:** 3.10 ou superior.
+* **Dependências Externas:** Nenhuma (utiliza exclusivamente módulos nativos da biblioteca padrão: `sys`, `os`, `re`, `typing`, `argparse`).
 
-# =====================================================================
-# NÚCLEO DA CPU 6502-T
-# =====================================================================
+---
 
-class CPU6502T:
-    S_FETCH_OPCODE  = 0
-    S_DECODE        = 1
-    S_FETCH_OPERAND = 2
-    S_FETCH_ADDR_H  = 3
-    S_EXECUTE       = 4
+## 3. Modos de Execução
 
-    STATE_NAMES = {
-        0: "FETCH_OPCODE",
-        1: "DECODE",
-        2: "FETCH_OPERAND",
-        3: "FETCH_ADDR",
-        4: "EXECUTE"
-    }
+### 3.1. Modo Interativo (Depuração Passo a Passo)
 
-    def __init__(self, mem_size: int = 64):
-        self.mem_size = mem_size
-        self.memory: List[int] = [0] * mem_size
-        
-        self.pc = 0
-        self.acc = 0
-        self.reg_x = 0
-        self.reg_y = 0
-        self.ir = 0
-        
-        self.operand_latch = 0
-        self.target_addr = 0
-        self.state = self.S_FETCH_OPCODE
-        self.cycle_count = 0
-        
-        self.flag_zero = True
-        self.flag_sign = 0
-        self.flag_overflow = False
+Inicia o emulador abrindo o console interativo de depuração:
 
-        self.addr_bus = 0
-        self.data_out = 0
-        self.read_en = False
-        self.write_en = False
+```bash
+# Executa com o programa demonstrativo embutido
+python3 tools/emu6502t.py
 
-    def reset(self):
-        self.pc = 0
-        self.acc = 0
-        self.reg_x = 0
-        self.reg_y = 0
-        self.ir = 0
-        self.state = self.S_FETCH_OPCODE
-        self.cycle_count = 0
-        self.flag_zero = True
-        self.flag_sign = 0
-        self.flag_overflow = False
-        self.read_en = False
-        self.write_en = False
+# Carrega um arquivo binário compilado (.mem)
+python3 tools/emu6502t.py build/program.mem
 
-    def alu_add(self, a_val: int, b_val: int, cin: int = 0) -> int:
-        s_int = a_val + b_val + cin
-        cout = 0
-        if s_int > 364:
-            cout = 1
-            res = s_int - 729
-        elif s_int < -364:
-            cout = -1
-            res = s_int + 729
-        else:
-            res = s_int
-            cout = 0
+# Define uma memória RAM expandida (ex.: 128 palavras)
+python3 tools/emu6502t.py build/program.mem -s 128
 
-        self.flag_overflow = (cout != 0)
-        self.flag_zero = (res == 0)
-        self.flag_sign = 0 if res == 0 else (1 if res > 0 else -1)
-        return res
+# Via orquestrador Make (compila e inicia)
+make emu
+```
 
-    def step_cycle(self):
-        self.cycle_count += 1
-        self.read_en = False
-        self.write_en = False
+### 3.2. Modo Automatizado (Batch / Headless)
 
-        if self.state == self.S_FETCH_OPCODE:
-            self.addr_bus = self.pc
-            self.read_en = True
-            self.state = self.S_DECODE
+Executa um número pré-determinado de ciclos e emite a telemetria final:
 
-        elif self.state == self.S_DECODE:
-            self.ir = self.memory[self.addr_bus % self.mem_size]
-            self.pc = (self.pc + 1) % 59049
-            
-            trits = int_to_trits(self.ir, 6)
-            mode = (trits[2], trits[3])
+```bash
+# Executa 60 ciclos e exibe status e dump completo da memória
+python3 tools/emu6502t.py build/program.mem --autorun --cycles 60 --dump
 
-            if mode == (0, 1):
-                self.addr_bus = self.pc
-                self.read_en = True
-                self.state = self.S_FETCH_OPERAND
-            elif mode == (1, 1):
-                self.addr_bus = self.pc
-                self.read_en = True
-                self.state = self.S_FETCH_ADDR_H
-            else:
-                self.state = self.S_EXECUTE
+# Executa 500 ciclos apenas para verificar estado final dos registradores
+python3 tools/emu6502t.py build/program.mem -a -n 500
+```
 
-        elif self.state == self.S_FETCH_OPERAND:
-            self.operand_latch = self.memory[self.addr_bus % self.mem_size]
-            self.pc = (self.pc + 1) % 59049
-            self.state = self.S_EXECUTE
+#### Parâmetros de Linha de Comando (CLI)
 
-        elif self.state == self.S_FETCH_ADDR_H:
-            self.target_addr = self.memory[self.addr_bus % self.mem_size]
-            self.pc = (self.pc + 1) % 59049
-            self.state = self.S_EXECUTE
+| Opção | Argumento | Padrão | Descrição |
+| :--- | :--- | :--- | :--- |
+| `file` | `[caminho]` | *Demo embutido* | Caminho do arquivo de memória (`.mem`, `.hex` ou bloco Verilog). |
+| `-s`, `--size` | `INT` | `64` | Capacidade da memória RAM em palavras de 6 trits. |
+| `-a`, `--autorun` | *flag* | `False` | Executa diretamente em lote sem abrir console interativo. |
+| `-n`, `--cycles` | `INT` | `500` | Limite de ciclos de clock no modo autorun. |
+| `-d`, `--dump` | *flag* | `False` | Exibe o dump completo da memória ao término da execução. |
+| `-h`, `--help` | *flag* | - | Exibe a mensagem de ajuda e sintaxe. |
 
-        elif self.state == self.S_EXECUTE:
-            trits = int_to_trits(self.ir, 6)
-            group = (trits[4], trits[5])
-            mode  = (trits[2], trits[3])
-            op    = (trits[0], trits[1])
+---
 
-            if group == (1, 1):
-                op_b = self.operand_latch if mode == (0, 1) else self.reg_x
-                if op == (-1, -1):    self.acc = self.alu_add(self.acc, op_b)
-                elif op == (-1, 1):   self.acc = self.alu_add(self.acc, -op_b)
-                elif op == (0, 1):    self.acc = self.alu_add(0, -self.acc)
-                elif op == (1, 1):    self.acc = self.alu_add(0, op_b)
-                elif op == (1, 0):    self.acc = self.alu_add(self.acc, 1)
-                elif op == (0, -1):   self.acc = self.alu_add(self.acc, -1)
+## 4. Console Interativo de Depuração
 
-            elif group == (-1, 0):
-                if op == (-1, -1):
-                    self.reg_x = self.acc
-                elif op == (-1, 1):
-                    self.acc = self.reg_x
-                    self.flag_zero = (self.acc == 0)
-                    self.flag_sign = 0 if self.acc == 0 else (1 if self.acc > 0 else -1)
-                elif op == (0, 1):
-                    self.reg_y = self.acc
+Ao iniciar em modo interativo, o emulador exibe o prompt `(6502-T) > ` e aguarda instruções do operador.
 
-            elif group == (-1, -1):
-                if op == (-1, -1):    self.pc = self.target_addr
-                elif op == (-1, 1):   (self.flag_zero and setattr(self, 'pc', self.target_addr))
-                elif op == (0, -1):   (self.flag_sign == -1 and setattr(self, 'pc', self.target_addr))
-                elif op == (0, 1):    (self.flag_sign == 1 and setattr(self, 'pc', self.target_addr))
+```text
+==============================================================================
+ EMULADOR 6502-T (TRIT + BASE 12) - DEPURAÇÃO INTERATIVA CICLO A CICLO
+ Comandos: [Enter]=Passo de Ciclo | 'i'=Passo de Instrução | 'c'=Continuar
+           'm'=Ver Memória | 'b <end>'=Breakpoint | 'r'=Reset | 'q'=Sair
+==============================================================================
+```
 
-            elif group == (0, 1):
-                if op == (1, 1):
-                    self.addr_bus = self.target_addr
-                    self.data_out = self.acc
-                    self.memory[self.target_addr % self.mem_size] = self.acc
-                    self.write_en = True
+### 4.1. Tabela de Comandos
 
-            self.state = self.S_FETCH_OPCODE
+| Comando | Sintaxe | Descrição |
+| :--- | :--- | :--- |
+| **Passo de Ciclo** | `[Enter]` ou `s` | Avança exatamente **1 ciclo de clock** na FSM. Permite inspecionar barramentos nas fases de busca e decodificação. |
+| **Passo de Instrução** | `i` | Executa quantos ciclos forem necessários até completar a instrução corrente e retornar a `FETCH_OPCODE`. |
+| **Continuar** | `c` | Executa continuamente até atingir um breakpoint ativo ou o limite de 2000 ciclos. |
+| **Exibir Memória** | `m [inicio] [tamanho]` | Apresenta o dump formatado das palavras de memória. Ex: `m 30 10` exibe 10 palavras a partir do endereço 30. |
+| **Breakpoint** | `b <endereco>` | Alterna um ponto de parada (*toggle*). Ex: `b 17` adiciona/remove breakpoint no endereço 17. |
+| **Listar Breakpoints** | `b` | Lista todos os endereços com breakpoints ativos. |
+| **Resetar CPU** | `r` | Reinicializa registradores, PC e FSM, mantendo o conteúdo gravado na memória RAM. |
+| **Sair** | `q` | Encerra a execução do emulador. |
 
-    def step_instruction(self):
-        while True:
-            self.step_cycle()
-            if self.state == self.S_FETCH_OPCODE:
-                break
+---
 
-    def load_program_from_file(self, filepath: str) -> int:
-        """
-        Carrega programa de arquivo .mem, .hex ou Verilog.
-        Retorna a quantidade de palavras carregadas com sucesso.
-        """
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f"Arquivo não encontrado: {filepath}")
+## 5. Interpretação da Telemetria e Painel de Estado
 
-        with open(filepath, "r", encoding="utf-8") as f:
-            content = f.read()
+A cada passo, o emulador emite o quadro de telemetria completo:
 
-        words_loaded = 0
-        current_addr = 0
+```text
+┌────────────────────────────────────────────────────────────────────────────┐
+│ CICLO: 60     | FSM: DECODE         | BARRAMENTO: ADDR=$21 DATA_OUT=+050 │
+├────────────────────────────────────────────────────────────────────────────┤
+│ REGISTRADORES       TRITS (MST->LST)    DECIMAL     BASE 12                │
+│  Acumulador (A) :   [0+-0--]            +50        +0z042                │
+│  Índice X       :   [000+++]            +13        +0z011                │
+│  Índice Y       :   [000000]             +0         0z000                │
+│  Prog. Counter  :   [000000+-+0]       $0021        +0z019                │
+├────────────────────────────────────────────────────────────────────────────┤
+│ FLAGS TERNÁRIAS: [Zero (Z): 0] [Sinal (S): +] [Overflow (O): 0]               │
+└────────────────────────────────────────────────────────────────────────────┘
+```
 
-        for line in content.splitlines():
-            clean = re.sub(r"(//|;|#).*", "", line).strip()
-            if not clean:
-                continue
+### 5.1. Componentes do Painel
 
-            # Diretiva de endereço estilo @addr (ex: @0A ou @12)
-            if clean.startswith("@"):
-                addr_token = clean[1:].strip()
-                current_addr = int(addr_token, 16) if any(c in addr_token.lower() for c in "abcdef") else int(addr_token)
-                continue
+1. **Cabeçalho:**
+   * `CICLO`: Contador absoluto de ciclos de clock transcorridos.
+   * `FSM`: Estado atual da máquina de estados (`FETCH_OPCODE`, `DECODE`, `FETCH_OPERAND`, `FETCH_ADDR`, `EXECUTE`).
+   * `BARRAMENTO`: Endereço ativo no barramento externo (`ADDR`) e dado apresentado na saída de escrita (`DATA_OUT`).
 
-            # Formato de atribuição Verilog: ram_block[ 0] = 12'b101001101010;
-            assign_match = re.search(r"\[\s*(\d+)\s*\]\s*=\s*(12'b[01]{12}|[01]{12})", clean)
-            if assign_match:
-                addr = int(assign_match.group(1))
-                bin_str = assign_match.group(2).replace("12'b", "")
-                val = trits_to_int(bin12_to_trits(bin_str))
-                if addr < self.mem_size:
-                    self.memory[addr] = val
-                    words_loaded += 1
-                continue
+2. **Registradores:**
+   * `Acumulador (A)`, `Índice X`, `Índice Y`: Registradores de dados de 6 trits balanceados (faixa $[-364, +364]$).
+   * `Prog. Counter (PC)`: Registrador de ponteiro de instruções de 10 trits ($59.049$ posições lineares).
+   * Para cada registrador são fornecidas três representações simultâneas:
+     * **Trits Físicos:** Vetor na ordem mais significativo $\to$ menos significativo (`MST -> LST`), usando os caracteres `-` ($-1$), `0` ($0$) e `+` ($+1$).
+     * **Decimal:** Inteiro com sinal correspondente ao valor aritmético real.
+     * **Base 12 (Duodecimal):** Notação literal `0z...` utilizando os algarismos `0-9, A, B`.
 
-            # Formato .mem (vetor binário plano de 12 bits)
-            bin_tokens = [tok for tok in clean.split() if re.fullmatch(r"[01]{12}", tok)]
-            if bin_tokens:
-                for b_tok in bin_tokens:
-                    if current_addr < self.mem_size:
-                        val = trits_to_int(bin12_to_trits(b_tok))
-                        self.memory[current_addr] = val
-                        current_addr += 1
-                        words_loaded += 1
-                continue
+3. **Flags Ternárias:**
+   * `Zero (Z)`: `1` quando o resultado da ALU ou transferência for zero; `0` caso contrário.
+   * `Sinal (S)`: `-` para valores negativos, `0` para neutro/zero, `+` para valores estritamente positivos.
+   * `Overflow (O)`: `1` se a operação na ALU extrapolou $[-364, +364]$; `0` em operação regular.
 
-            # Formato numérico decimal ou hexadecimal puro por token
-            num_tokens = clean.split()
-            for token in num_tokens:
-                val = None
-                if token.startswith("$") or token.startswith("0x"):
-                    val = int(token.replace("$", "").replace("0x", ""), 16)
-                elif re.fullmatch(r"[+-]?\d+", token):
-                    val = int(token)
+---
 
-                if val is not None and current_addr < self.mem_size:
-                    self.memory[current_addr] = val
-                    current_addr += 1
-                    words_loaded += 1
+## 6. Formatos de Arquivo Suportados
 
-        return words_loaded
+O emulador aceita carregar código-máquina e dados a partir de arquivos em múltiplos formatos:
 
-# =====================================================================
-# CLI DE DEPURAÇÃO
-# =====================================================================
+### 6.1. Formato `.mem` (Padrão do Assembler)
+Vetores de 12 bits linha a linha, com ou sem comentários:
+```text
+12'b101010011010 // [ 0] LDA #0
+12'b010101010101 // [ 1] Dado (0)
+12'b101010011010 // [ 2] LDA #13
+12'b010101101010 // [ 3] Dado (13)
+```
 
-class DebuggerCLI:
-    def __init__(self, cpu: CPU6502T):
-        self.cpu = cpu
-        self.breakpoints = set()
+### 6.2. Diretivas de Endereçamento `@addr`
+Compatível com a diretiva `$readmemb` do Verilog:
+```text
+@00 101010011010
+@01 010101010101
+@20 010110100000
+```
 
-    def print_status(self):
-        c = self.cpu
-        tr_acc = trits_to_str(int_to_trits(c.acc, 6))
-        tr_x   = trits_to_str(int_to_trits(c.reg_x, 6))
-        tr_y   = trits_to_str(int_to_trits(c.reg_y, 6))
-        tr_pc  = trits_to_str(int_to_trits(c.pc, 10))
+### 6.3. Blocos de Atribuição Verilog
+Códigos exportados diretamente para testbenches:
+```verilog
+initial begin
+    ram_block[ 0] = 12'b101010011010; // LDA #0
+    ram_block[ 1] = 12'b010101010101; // Dado (0)
+end
+```
 
-        sign_sym = "-" if c.flag_sign == -1 else ("+" if c.flag_sign == 1 else "0")
+---
 
-        print("┌" + "─" * 76 + "┐")
-        print(f"│ CICLO: {c.cycle_count:<6} | FSM: {c.STATE_NAMES[c.state]:<14} | BARRAMENTO: ADDR=${c.addr_bus:02d} "
-              f"DATA_OUT={c.data_out:+04d} │")
-        print("├" + "─" * 76 + "┤")
-        print(f"│ REGISTRADORES       TRITS (MST->LST)    DECIMAL     BASE 12                │")
-        print(f"│  Acumulador (A) :   [{tr_acc}]           {c.acc:+4d}        {int_to_dozenal(c.acc)}                │")
-        print(f"│  Índice X       :   [{tr_x}]           {c.reg_x:+4d}        {int_to_dozenal(c.reg_x)}                │")
-        print(f"│  Índice Y       :   [{tr_y}]           {c.reg_y:+4d}        {int_to_dozenal(c.reg_y)}                │")
-        print(f"│  Prog. Counter  :   [{tr_pc}]       ${c.pc:04d}        {int_to_dozenal(c.pc)}                │")
-        print("├" + "─" * 76 + "┤")
-        print(f"│ FLAGS TERNÁRIAS: [Zero (Z): {int(c.flag_zero)}] [Sinal (S): {sign_sym}] "
-              f"[Overflow (O): {int(c.flag_overflow)}]               │")
-        print("└" + "─" * 76 + "┘")
+## 7. Exemplo Passo a Passo de Sessão de Depuração
 
-    def dump_memory(self, start: int = 0, length: int = 16):
-        print(f"\n--- MAPA DE MEMÓRIA (Palavras {start} a {min(start+length-1, self.cpu.mem_size-1)}) ---")
-        for i in range(start, min(start + length, self.cpu.mem_size)):
-            val = self.cpu.memory[i]
-            tr_str = trits_to_str(int_to_trits(val, 6))
-            doz_str = int_to_dozenal(val)
-            marker = " <- PC" if i == self.cpu.pc else ""
-            print(f"  [{i:02d}] : {val:+4d} | {doz_str} | Trits: [{tr_str}]{marker}")
-        print()
+```bash
+$ python3 tools/emu6502t.py build/program.mem
+[✓] 23 palavras de 6 trits carregadas de 'build/program.mem'.
+(6502-T) > b 17
+[+] Breakpoint adicionado em $17
 
-    def run_interactive(self):
-        print("=" * 78)
-        print(" EMULADOR 6502-T - DEPURAÇÃO INTERATIVA")
-        print(" Comandos: [Enter]=Ciclo | 'i'=Instrução | 'c'=Continuar | 'm'=Memória | 'q'=Sair")
-        print("=" * 78)
-        self.print_status()
+(6502-T) > c
+[!] Breakpoint atingido no endereço 17!
 
-        while True:
-            try:
-                cmd = input("(6502-T) > ").strip().lower()
-            except (KeyboardInterrupt, EOFError):
-                break
+(6502-T) > m 30 5
+--- MAPA DE MEMÓRIA (Palavras 30 a 34) ---
+  [30] :    0 |  0z000 | Trits: [000000]
+  [31] :    0 |  0z000 | Trits: [000000]
+  [32] : +156 | +0z110 | Trits: [+-0-+0]
+  [33] :    0 |  0z000 | Trits: [000000]
+  [34] :    0 |  0z000 | Trits: [000000]
 
-            if cmd in ["", "s"]:
-                self.cpu.step_cycle()
-                self.print_status()
-            elif cmd == "i":
-                self.cpu.step_instruction()
-                self.print_status()
-            elif cmd == "c":
-                steps = 0
-                while steps < 10000:
-                    self.cpu.step_cycle()
-                    steps += 1
-                    if self.cpu.pc in self.breakpoints and self.cpu.state == CPU6502T.S_FETCH_OPCODE:
-                        print(f"\n[!] Breakpoint atingido no endereço {self.cpu.pc}!")
-                        break
-                self.print_status()
-            elif cmd.startswith("m"):
-                parts = cmd.split()
-                start = int(parts[1]) if len(parts) > 1 else 0
-                length = int(parts[2]) if len(parts) > 2 else 16
-                self.dump_memory(start, length)
-            elif cmd.startswith("b"):
-                parts = cmd.split()
-                if len(parts) > 1:
-                    bp = int(parts[1])
-                    if bp in self.breakpoints:
-                        self.breakpoints.remove(bp)
-                        print(f"[-] Breakpoint removido de ${bp:02d}")
-                    else:
-                        self.breakpoints.add(bp)
-                        print(f"[+] Breakpoint adicionado em ${bp:02d}")
-                else:
-                    print(f"Breakpoints: {sorted(list(self.breakpoints))}")
-            elif cmd == "r":
-                self.cpu.reset()
-                print("[*] CPU Resetada.")
-                self.print_status()
-            elif cmd == "q":
-                break
+(6502-T) > i
+(6502-T) > i
+(6502-T) > m 32 2
+--- MAPA DE MEMÓRIA (Palavras 32 a 33) ---
+  [32] : +156 | +0z110 | Trits: [+-0-+0]
+  [33] :  +50 | +0z042 | Trits: [0+-0--]
 
-
-# =====================================================================
-# ENTRADA DE EXECUÇÃO PRINCIPAL (CLI ARGPARSE)
-# =====================================================================
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Emulador Ciclo a Ciclo da CPU Ternária 6502-T (TRIT + Base 12)"
-    )
-    parser.add_argument(
-        "file",
-        nargs="?",
-        default=None,
-        help="Caminho do arquivo binário (.mem, .hex, .txt ou bloco Verilog) para carregar na RAM"
-    )
-    parser.add_argument(
-        "-s", "--size",
-        type=int,
-        default=64,
-        help="Tamanho da memória RAM em palavras de 6 trits (padrão: 64)"
-    )
-    parser.add_argument(
-        "-a", "--autorun",
-        action="store_true",
-        help="Executa diretamente o programa sem abrir a interface interativa"
-    )
-    parser.add_argument(
-        "-n", "--cycles",
-        type=int,
-        default=500,
-        help="Limite de ciclos em modo autorun (padrão: 500)"
-    )
-    parser.add_argument(
-        "-d", "--dump",
-        action="store_true",
-        help="Exibe o dump de memória ao final da execução"
-    )
-
-    args = parser.parse_args()
-
-    cpu = CPU6502T(mem_size=args.size)
-
-    if args.file:
-        try:
-            count = cpu.load_program_from_file(args.file)
-            print(f"[✓] {count} palavras de 6 trits carregadas de '{args.file}'.")
-        except Exception as e:
-            print(f"[X] Erro ao carregar arquivo: {e}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        # Programa básico de demonstração caso nenhum arquivo seja passado
-        demo = {0: 337, 1: 13, 2: -283, 3: 329, 4: 130, 5: 121, 6: 32}
-        for k, v in demo.items():
-            cpu.memory[k] = v
-        print("[i] Nenhum arquivo especificado. Programa de teste padrão carregado.")
-
-    debugger = DebuggerCLI(cpu)
-
-    if args.autorun:
-        print(f"[*] Executando até {args.cycles} ciclos de clock...")
-        for _ in range(args.cycles):
-            cpu.step_cycle()
-        debugger.print_status()
-        if args.dump:
-            debugger.dump_memory(0, min(args.size, 32))
-    else:
-        debugger.run_interactive()
-
-
-if __name__ == "__main__":
-    main()
+(6502-T) > q
+```

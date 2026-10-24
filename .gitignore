@@ -28,3 +28,8 @@ env/
 .idea/
 *.swp
 *~
+
+# Binários Go
+web/web
+web/6502t-web
+*.exe

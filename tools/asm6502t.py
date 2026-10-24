@@ -42,9 +42,13 @@ INSTRUCTION_SET = {
     "TAY":     ((-1,  0), (-1, -1), ( 0,  1)),
     "TYA":     ((-1,  0), (-1, -1), ( 0, -1)),
 
+    # Instrução Neutra (Grupo: 0, 0)
+    "NOP":     (( 0,  0), ( 0,  0), ( 0,  0)),
+
     # Saltos e Desvios de Fluxo (Grupo: -1, -1)
     "JMP":     ((-1, -1), ( 1,  1), (-1, -1)),
     "BEQ":     ((-1, -1), ( 1,  1), (-1,  1)),
+    "BNE":     ((-1, -1), ( 1,  1), ( 1, -1)),
     "BMI":     ((-1, -1), ( 1,  1), ( 0, -1)),
     "BPL":     ((-1, -1), ( 1,  1), ( 0,  1)),
 
@@ -228,6 +232,13 @@ class Assembler6502T:
             if not mnemonic:
                 continue
 
+            if mnemonic in [".ORG", "ORG"]:
+                current_addr = self.evaluate_expression(operand)
+                continue
+            elif mnemonic in [".WORD", "WORD", ".DATA", "DATA"]:
+                current_addr += 1
+                continue
+
             # Instruções com operando imediato ou absoluto ocupam 2 palavras
             if operand:
                 current_addr += 2
@@ -239,6 +250,16 @@ class Assembler6502T:
         current_addr = 0
         for _, mnemonic, operand in self.expanded_code:
             if not mnemonic:
+                continue
+
+            if mnemonic in [".ORG", "ORG"]:
+                current_addr = self.evaluate_expression(operand)
+                continue
+            elif mnemonic in [".WORD", "WORD", ".DATA", "DATA"]:
+                val = self.evaluate_expression(operand)
+                val_trits = int_to_balanced_ternary(val, 6)
+                self.machine_code[current_addr] = (trits_to_verilog_bin(val_trits), f".WORD {val}")
+                current_addr += 1
                 continue
 
             is_immediate = operand.startswith("#")
@@ -272,7 +293,7 @@ class Assembler6502T:
                 current_addr += 1
 
             # 3. Saltos Condicionais e Incondicionais
-            elif mnemonic in ["JMP", "BEQ", "BMI", "BPL"]:
+            elif mnemonic in ["JMP", "BEQ", "BNE", "BMI", "BPL"]:
                 target_addr = self.evaluate_expression(clean_op)
                 opcode_bin = encode_opcode(*INSTRUCTION_SET[mnemonic])
                 self.machine_code[current_addr] = (opcode_bin, f"{mnemonic} ${target_addr}")
@@ -283,7 +304,7 @@ class Assembler6502T:
                 current_addr += 1
 
             # 4. Instruções Implícitas / Registradores
-            elif mnemonic in ["TAX", "TXA", "TAY", "TYA", "NEG", "INC", "DEC"]:
+            elif mnemonic in ["TAX", "TXA", "TAY", "TYA", "NEG", "INC", "DEC", "NOP"]:
                 opcode_bin = encode_opcode(*INSTRUCTION_SET[mnemonic])
                 self.machine_code[current_addr] = (opcode_bin, mnemonic)
                 current_addr += 1

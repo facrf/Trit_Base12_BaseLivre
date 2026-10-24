@@ -36,9 +36,13 @@ REVERSE_ISA: Dict[Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]], Tupl
     ((-1,  0), (-1, -1), ( 0,  1)): ("TAY", "NONE"),
     ((-1,  0), (-1, -1), ( 0, -1)): ("TYA", "NONE"),
 
+    # Instrução Neutra (Grupo: 0, 0)
+    (( 0,  0), ( 0,  0), ( 0,  0)): ("NOP", "NONE"),
+
     # Fluxo / Saltos (Grupo: -1, -1)
     ((-1, -1), ( 1,  1), (-1, -1)): ("JMP", "ABS"),
     ((-1, -1), ( 1,  1), (-1,  1)): ("BEQ", "ABS"),
+    ((-1, -1), ( 1,  1), ( 1, -1)): ("BNE", "ABS"),
     ((-1, -1), ( 1,  1), ( 0, -1)): ("BMI", "ABS"),
     ((-1, -1), ( 1,  1), ( 0,  1)): ("BPL", "ABS"),
 
@@ -97,9 +101,16 @@ class Disassembler6502T:
 
     def load_verilog_code(self, text: str):
         """Carrega dados a partir de blocos Verilog ou linhas .mem."""
+        current_mem_addr = 0
         for line in text.splitlines():
             line = re.sub(r"//.*", "", line).strip()
             if not line:
+                continue
+
+            # Formato 0: Diretiva de endereço estilo @addr (ex: @0A ou @12)
+            if line.startswith("@"):
+                addr_token = line[1:].strip()
+                current_mem_addr = int(addr_token, 16) if any(c in addr_token.lower() for c in "abcdef") else int(addr_token)
                 continue
 
             # Formato 1: ram_block[ 0] = 12'b101001101010;
@@ -108,13 +119,14 @@ class Disassembler6502T:
                 addr = int(match_assign.group(1))
                 bin_raw = match_assign.group(2).replace("12'b", "")
                 self.memory[addr] = bin_raw
+                current_mem_addr = addr + 1
                 continue
 
             # Formato 2: Arquivo .mem direto (12 bits por linha, com ou sem 12'b)
             clean_bits = line.replace("12'b", "").strip()
             if re.fullmatch(r"[01]{12}", clean_bits):
-                addr = len(self.memory)
-                self.memory[addr] = clean_bits
+                self.memory[current_mem_addr] = clean_bits
+                current_mem_addr += 1
 
     def pass1_analyze_and_create_labels(self):
         """Passo 1: Percorre as instruções para mapear alvos de saltos e criar labels."""
@@ -148,9 +160,9 @@ class Disassembler6502T:
 
                         # Se for salto ou instrução de escrita absoluta, gera label
                         if op_type == "ABS":
-                            if mnemonic in ["JMP", "BEQ", "BMI", "BPL"]:
+                            if mnemonic in ["JMP", "BEQ", "BNE", "BMI", "BPL"]:
                                 self.labels[op_val] = f"L_{op_val:02d}"
-                            elif mnemonic == "STA":
+                            elif mnemonic in ["STA", "LDA", "ADD", "SUB"]:
                                 if op_val not in self.labels:
                                     self.labels[op_val] = f"DATA_{op_val:02d}"
 
@@ -219,9 +231,43 @@ class Disassembler6502T:
 
         return "\n".join(output_lines)
 
-    def disassemble(self, text: str) -> str:
+    def generate_source_assembly(self) -> str:
+        """Gera código-fonte Assembly limpo, pronto para ser remontado pelo Assembler."""
+        pc = 0
+        max_addr = max(self.memory.keys()) if self.memory else 0
+        lines = []
+        while pc <= max_addr:
+            if pc not in self.memory:
+                pc += 1
+                continue
+            if pc in self.labels:
+                lines.append(f"{self.labels[pc]}:")
+            if pc in self.instruction_map:
+                mnemonic, op_type, op_val = self.instruction_map[pc]
+                if op_type == "IMM":
+                    lines.append(f"    {mnemonic} #{op_val}")
+                    pc += 2
+                elif op_type == "ABS":
+                    if mnemonic in ["JMP", "BEQ", "BNE", "BMI", "BPL"]:
+                        target_label = self.labels.get(op_val, str(op_val))
+                    else:
+                        target_label = str(op_val)
+                    lines.append(f"    {mnemonic} {target_label}")
+                    pc += 2
+                else:
+                    lines.append(f"    {mnemonic}")
+                    pc += 1
+            else:
+                val = trits_to_int(bin12_to_trits(self.memory[pc]))
+                lines.append(f"    .WORD {val}")
+                pc += 1
+        return "\n".join(lines) + "\n"
+
+    def disassemble(self, text: str, clean: bool = False) -> str:
         self.load_verilog_code(text)
         self.pass1_analyze_and_create_labels()
+        if clean:
+            return self.generate_source_assembly()
         return self.pass2_generate_assembly()
 
 
@@ -235,6 +281,7 @@ def main():
         description="Desassemblador (Disassembler) para a CPU Ternária 6502-T"
     )
     parser.add_argument("file", nargs="?", default=None, help="Arquivo de entrada (.mem, .v, .hex contendo palavras de 12 bits)")
+    parser.add_argument("-c", "--clean", action="store_true", help="Emite código Assembly limpo re-compilável (sem listagem/endereços)")
     args = parser.parse_args()
 
     disasm = Disassembler6502T()
@@ -244,7 +291,7 @@ def main():
             sys.exit(1)
         with open(args.file, "r", encoding="utf-8") as f:
             content = f.read()
-        print(disasm.disassemble(content))
+        print(disasm.disassemble(content, clean=args.clean))
     else:
         # Teste com os vetores de demonstração
         sample_verilog_code = """

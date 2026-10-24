@@ -22,6 +22,7 @@ ASM_TOOL      := $(TOOLS_DIR)/asm6502t.py
 DISASM_TOOL   := $(TOOLS_DIR)/disasm6502t.py
 EMU_TOOL      := $(TOOLS_DIR)/emu6502t.py
 TEST_SUITE    := $(TESTS_DIR)/test_6502t_suite.py
+TEST_EXTENDED := $(TESTS_DIR)/test_6502t_extended.py
 TCL_SCRIPT    := $(SCRIPTS_DIR)/build_bitstream.tcl
 
 # Fontes e Alvos
@@ -38,7 +39,7 @@ DOCKER_IMAGE  := facrf/6502t-web:latest
 DOCKER_NAME   := 6502t_web
 WEB_PORT      := 27005
 
-.PHONY: all test asm disasm emu sim bitstream program clean help web-build web-run
+.PHONY: all test test-all asm disasm emu sim bitstream program clean help web-build web-run
 
 # Alvo padrão: executa a suite de testes e monta o programa de exemplo
 all: test asm
@@ -49,6 +50,10 @@ all: test asm
 test:
 	@echo "===> [TEST] Executando Test Suite Automatizada (6502-T)..."
 	@$(PYTHON) $(TEST_SUITE)
+
+test-all: test
+	@echo "===> [TEST-EXTENDED] Executando Test Suite Estendida (6502-T)..."
+	@$(PYTHON) $(TEST_EXTENDED)
 
 # ==============================================================================
 # MONTAGEM E DESMONTAGEM DE CÓDIGO ASSEMBLY
@@ -123,7 +128,8 @@ clean:
 
 help:
 	@echo "Comandos disponíveis no projeto 6502-T:"
-	@echo "  make test       - Roda a suite automatizada de testes em Python"
+	@echo "  make test       - Roda a suite automatizada de testes em Python (7/7)"
+	@echo "  make test-all   - Roda a suite padrão e a suite estendida de testes"
 	@echo "  make asm        - Compila src_asm/program.s para build/program.mem"
 	@echo "  make disasm     - Desassembla o binário build/program.mem"
 	@echo "  make emu        - Inicia o emulador ciclo a ciclo interativo"

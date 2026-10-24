@@ -39,25 +39,49 @@ Ao atuar neste repositório, o agente deve assumir o papel de **Engenheiro Sêni
 
 ```text
 Trit_Base12_BaseLivre/
+├── constr/                      # Restrições físicas para FPGA Digilent Basys 3
+│   └── basys3_6502t.xdc         # Mapeamento de pinos e clocks para Artix-7
+├── rtl/                         # 10 módulos Verilog sintetizáveis (silício)
+│   ├── alu_6trit.v              # Unidade Lógica e Aritmética ternária balanceada
+│   ├── button_debounce.v        # Debouncer de botões para FPGA
+│   ├── cpu_6502t_debugger.v     # Controlador de debug e interface do usuário
+│   ├── cpu_6502t_top.v          # Top-level da CPU MOS 6502-T
+│   ├── display_controller_4digit.v # Varredura multiplexada de displays de 7 segmentos
+│   ├── dozenal_7seg_decoder.v   # Decodificador de base 12 para 7 segmentos
+│   ├── fpga_test_top.v          # Top-level para sintetização em FPGA Basys 3
+│   ├── instruction_decoder_6502t.v # Decodificador de instruções e FSM síncrona
+│   ├── tfa_1trit.v              # Ternary Full Adder de 1 trit balanceado
+│   └── trits_to_dozenal.v       # Conversor físico de 6 trits para 2 dígitos duodecimais
+├── sim/                         # 7 testbenches para simulação Icarus Verilog
+│   ├── tb_alu_6trit.v           # Verificação da ALU e detecção de overflow
+│   ├── tb_cpu_6502t_system.v    # Simulação integrada da CPU executando programa
+│   ├── tb_display_controller.v  # Testbench dos controladores de display
+│   ├── tb_dozenal_display.v     # Verificação dos decodificadores de display
+│   ├── tb_instruction_decoder_6502t.v # Verificação do decodificador de instruções
+│   ├── tb_system_dozenal_monitor.v # Monitor de barramento e telemetria duodecimal
+│   └── tb_tfa_1trit.v           # Verificação da tabela de verdade do somador
 ├── docs/                        # Documentação técnica e especificações completas
 │   ├── base_conceitual.md       # Fundamentos da física do trit e constante de Euler (e)
 │   ├── especificacao_completa.md# Especificação formal da CPU, ISA e RTL
+│   ├── manual_emulador.md       # Manual de operação do emulador ciclo a ciclo
 │   ├── simulacao.md             # Guia de simulação de hardware
 │   ├── tese_antitese.md         # Confronto técnico binário vs. ternário
 │   └── assets/                  # Esquemas e diagramas
 ├── tools/                       # Toolchain CLI em Python
-│   ├── asm6502t.py              # Montador de assembly ternário balanceado
-│   ├── disasm6502t.py           # Desassemblador de vetores de 12 bits
-│   └── emu6502t.py              # Emulador ciclo a ciclo interativo e com CLI
+│   ├── asm6502t.py              # Montador com suporte a NOP, BNE, .ORG e .WORD
+│   ├── disasm6502t.py           # Desassemblador com modo limpo (-c) e suporte a @addr
+│   ├── emu6502t.py              # Emulador ciclo a ciclo interativo (TYA, BNE, dump 64p)
+│   └── vamos6502t.py            # Compilador VAMOS-LANG para 6502-T (CLI, JSON e trace)
 ├── tests/                       # Testes automatizados de regressão
-│   └── test_6502t_suite.py      # Suite ponta a ponta (7 cenários de validação)
+│   ├── test_6502t_suite.py      # Suite ponta a ponta obrigatória (7/7 PASS)
+│   └── test_6502t_extended.py   # Suite estendida e reversibilidade round-trip
 ├── scripts/                     # Scripts de automação EDA
 │   └── build_bitstream.tcl      # Síntese em lote para Xilinx Vivado (FPGA Artix-7)
 ├── src_asm/                     # Programas Assembly de demonstração
 │   └── program.s                # Código fonte de exemplo
 ├── web/                         # Frontend Web em Go puro (Tema Tokyo Night)
 │   ├── go.mod                   # Módulo Go
-│   └── main.go                  # Servidor HTTP na porta 27005 e SPA embutido
+│   └── main.go                  # Servidor HTTP na porta 27005, Terminal e Laboratório VAMOS-T
 ├── Dockerfile.web               # Multi-stage Docker (golang:alpine -> python:3.12-alpine)
 ├── Makefile                     # Orquestrador padrão de comandos
 ├── AGENTS.md                    # Este guia operacional para LLMs

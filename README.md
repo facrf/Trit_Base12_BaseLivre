@@ -29,6 +29,7 @@
   - [5.2. Desassemblagem e Engenharia Reversa](#52-desassemblagem-e-engenharia-reversa)
   - [5.3. Execução Interativa no Emulador Ciclo a Ciclo](#53-execução-interativa-no-emulador-ciclo-a-ciclo)
   - [5.4. Interface Web Interativa (Tokyo Night) e Docker](#54-interface-web-interativa-tokyo-night-e-docker)
+  - [5.5. Compilador e Laboratório de Programação VAMOS-T](#55-compilador-e-laboratório-de-programação-vamos-t)
 - [6. Execução da Suite de Testes Automatizada](#6-execução-da-suite-de-testes-automatizada)
 - [7. Estrutura do Repositório](#7-estrutura-do-repositório)
 - [8. Referências Acadêmicas](#8-referências-acadêmicas)
@@ -334,6 +335,45 @@ make web-run
 
 Acesse no navegador: **`http://localhost:27005`**
 
+### 5.5. Compilador e Laboratório de Programação VAMOS-T
+
+O 6502-T integra um compilador e transpiler para a linguagem **VAMOS-LANG** ([facrf/VAMOSLANG](https://github.com/facrf/VAMOSLANG)), uma linguagem com sintaxe no estilo Go em português brasileiro adaptada para o conjunto de instruções ternário balanceado e barramentos de 6 trits.
+
+#### Exemplo em VAMOS-T: "Olá Mundo!" com Saída MMIO
+```go
+pacote principal
+
+// Exemplo VAMOS-T: Olá Mundo na CPU Ternária 6502-T
+// Emite cada caractere via Memory-Mapped I/O (Porta 120) no Barramento de 6 Trits
+funcao principal() {
+    escrever("Olá Mundo!\n")
+    parar()
+}
+```
+
+#### Uso via Linha de Comando (CLI)
+```bash
+# Executa diretamente o programa VAMOS-T com emulação na CPU e inspeção de variáveis
+python3 tools/vamos6502t.py --run
+
+# Compila para arquivo Assembly 6502-T
+python3 tools/vamos6502t.py meu_codigo.vamos -o build/meu_codigo.asm
+
+# Compila diretamente para binário .mem
+python3 tools/vamos6502t.py meu_codigo.vamos -o build/meu_codigo.mem
+
+# Retorna saída estruturada em JSON (Assembly + Trace de Execução + Variáveis)
+python3 tools/vamos6502t.py meu_codigo.vamos --json
+```
+
+#### Laboratório Visual na Interface Web (Porta 27005)
+A aba **🧪 Laboratório & Testes (VAMOS-T)** oferece uma experiência visual interativa de depuração:
+* **Player Passo a Passo:** Botões de reprodução animada (`▶`/`⏸`), avanço/recuo passo a passo (`⏮`/`⏭`) e controle de velocidade (50ms, 150ms, 350ms).
+* **Console CRT Virtual TTY:** Tela de fósforo verde com cursor pulsante exibindo a impressão em tempo real de caracteres via MMIO na porta 120 (`$78`).
+* **Medidor LED de 6 Trits:** 6 lâmpadas LED com iluminação física para cada estado do Acumulador (`+1` ciano neon, `0` indigo escuro, `-1` magenta neon).
+* **Destaque no Assembly:** A instrução Assembly correspondente ao Program Counter atual é iluminada sincronizadamente durante a animação.
+* **Barra de Linha do Tempo (Slider):** Arraste para inspecionar qualquer ciclo ou instrução no tempo de execução.
+
 ---
 
 ## 6. Execução da Suite de Testes Automatizada
@@ -341,11 +381,14 @@ Acesse no navegador: **`http://localhost:27005`**
 O projeto conta com uma rigorosa suite de validação funcional ponta a ponta que compila programas, inicializa a CPU simulada, executa os ciclos e confere asserções de acumulador, índices, flags e escrita na memória:
 
 ```bash
-# Execução via Makefile:
+# Execução da suite de regressão obrigatória (7/7):
 make test
 
 # Ou diretamente:
 python3 tests/test_6502t_suite.py
+
+# Execução da suite estendida e reversibilidade de toolchain (6/6 + Round-trip):
+make test-all
 ```
 
 ### Saída Esperada
@@ -373,25 +416,49 @@ python3 tests/test_6502t_suite.py
 
 ```text
 Trit_Base12_BaseLivre/
+├── constr/                      # Restrições físicas para FPGA Digilent Basys 3
+│   └── basys3_6502t.xdc         # Mapeamento de pinos e clocks para Artix-7
+├── rtl/                         # 10 módulos Verilog sintetizáveis (silício)
+│   ├── alu_6trit.v              # Unidade Lógica e Aritmética ternária balanceada
+│   ├── button_debounce.v        # Debouncer de botões para FPGA
+│   ├── cpu_6502t_debugger.v     # Controlador de debug e interface do usuário
+│   ├── cpu_6502t_top.v          # Top-level da CPU MOS 6502-T
+│   ├── display_controller_4digit.v # Varredura multiplexada de displays de 7 segmentos
+│   ├── dozenal_7seg_decoder.v   # Decodificador de base 12 para 7 segmentos
+│   ├── fpga_test_top.v          # Top-level para sintetização em FPGA Basys 3
+│   ├── instruction_decoder_6502t.v # Decodificador de instruções e FSM síncrona
+│   ├── tfa_1trit.v              # Ternary Full Adder de 1 trit balanceado
+│   └── trits_to_dozenal.v       # Conversor físico de 6 trits para 2 dígitos duodecimais
+├── sim/                         # 7 testbenches para simulação Icarus Verilog
+│   ├── tb_alu_6trit.v           # Verificação da ALU e detecção de overflow
+│   ├── tb_cpu_6502t_system.v    # Simulação integrada da CPU executando programa
+│   ├── tb_display_controller.v  # Testbench dos controladores de display
+│   ├── tb_dozenal_display.v     # Verificação dos decodificadores de display
+│   ├── tb_instruction_decoder_6502t.v # Verificação do decodificador de instruções
+│   ├── tb_system_dozenal_monitor.v # Monitor de barramento e telemetria duodecimal
+│   └── tb_tfa_1trit.v           # Verificação da tabela de verdade do somador
 ├── docs/                        # Documentação técnica e teses conceituais
 │   ├── base_conceitual.md       # Fundamentação física e matemática
 │   ├── especificacao_completa.md# Especificação detalhada da CPU e RTLs Verilog
+│   ├── manual_emulador.md       # Manual de operação do emulador ciclo a ciclo
 │   ├── simulacao.md             # Guia de simulação e formas de onda
 │   ├── tese_antitese.md         # Análise comparativa Ternário vs Binário
 │   └── assets/                  # Diagramas esquemáticos e imagens
 ├── tools/                       # Ferramentas CLI de software e emulação
-│   ├── asm6502t.py              # Montador com avaliador duodecimal
-│   ├── disasm6502t.py           # Desassemblador com detecção de labels
-│   └── emu6502t.py              # Emulador ciclo a ciclo interativo
+│   ├── asm6502t.py              # Montador com suporte a NOP, BNE, .ORG e .WORD
+│   ├── disasm6502t.py           # Desassemblador com modo limpo (-c) e suporte a @addr
+│   ├── emu6502t.py              # Emulador ciclo a ciclo interativo (TYA, BNE, dump 64p)
+│   └── vamos6502t.py            # Compilador VAMOS-LANG para 6502-T (CLI, JSON e trace)
 ├── tests/                       # Suites de validação funcional
-│   └── test_6502t_suite.py      # Testes ponta a ponta (7/7 suites de asserções)
+│   ├── test_6502t_suite.py      # Testes ponta a ponta obrigatórios (7/7 PASS)
+│   └── test_6502t_extended.py   # Testes estendidos e reversibilidade round-trip
 ├── scripts/                     # Scripts de automação EDA
 │   └── build_bitstream.tcl      # Script em lote para síntese no Vivado
 ├── src_asm/                     # Programas Assembly de demonstração
 │   └── program.s                # Código fonte exemplo em base 12
 ├── web/                         # Frontend Web HTTP em Go (Tema Tokyo Night)
 │   ├── go.mod                   # Definição do módulo Go
-│   └── main.go                  # Servidor web, piping de sub-processo e SPA
+│   └── main.go                  # Servidor web, Terminal, VAMOS-T Playground e TTY CRT
 ├── Dockerfile.web               # Multi-stage build (golang:alpine -> python:3.12-alpine)
 ├── Makefile                     # Orquestrador unificado de build e testes
 ├── AGENTS.md                    # Diretrizes e convenções para agentes de IA

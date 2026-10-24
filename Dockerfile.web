@@ -19,9 +19,12 @@ WORKDIR /app
 # Copia binário compilado no stage builder
 COPY --from=builder /bin/6502t-web /app/6502t-web
 
-# Copia diretórios do emulador e artefatos de memória
+# Copia ferramentas do emulador e código-fonte Assembly
 COPY tools/ /app/tools/
-COPY build/ /app/build/
+COPY src_asm/ /app/src_asm/
+
+# Monta o programa binário .mem internamente garantindo independência de artefatos locais
+RUN mkdir -p /app/build && python3 /app/tools/asm6502t.py /app/src_asm/program.s -o /app/build/program.mem
 
 # Porta do serviço web
 EXPOSE 27005

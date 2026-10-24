@@ -243,6 +243,64 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	s.respond(w, r, out)
 }
 
+func (s *Server) handleVamos(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Método não permitido (use POST)", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1024*1024))
+	if err != nil {
+		http.Error(w, "Erro ao ler código VAMOS", http.StatusBadRequest)
+		return
+	}
+
+	source := string(body)
+	if strings.HasPrefix(strings.TrimSpace(source), "{") {
+		var req struct {
+			Source string `json:"source"`
+		}
+		if err := json.Unmarshal(body, &req); err == nil && req.Source != "" {
+			source = req.Source
+		}
+	}
+
+	vamosScript := findFile([]string{
+		"tools/vamos6502t.py",
+		"../tools/vamos6502t.py",
+		"/app/tools/vamos6502t.py",
+	})
+
+	outMem := findFile([]string{
+		"build/program.mem",
+		"../build/program.mem",
+		"/app/build/program.mem",
+	})
+	_ = os.MkdirAll(filepath.Dir(outMem), 0755)
+
+	cmd := exec.Command("python3", vamosScript, "--json", "-o", outMem)
+	cmd.Stdin = strings.NewReader(source)
+	outBytes, err := cmd.CombinedOutput()
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   fmt.Sprintf("Falha de compilação VAMOS-T: %s (%v)", string(outBytes), err),
+		})
+		return
+	}
+
+	// Reinicia o emulador com o novo programa na memória
+	s.emu.mu.Lock()
+	_ = s.emu.startLocked()
+	s.emu.mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(outBytes)
+}
+
 func (s *Server) respond(w http.ResponseWriter, r *http.Request, text string) {
 	if strings.Contains(r.Header.Get("Accept"), "application/json") {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -317,6 +375,7 @@ func main() {
 	mux.HandleFunc("/", server.handleIndex)
 	mux.HandleFunc("/api/cmd", server.handleCmd)
 	mux.HandleFunc("/api/reset", server.handleReset)
+	mux.HandleFunc("/api/vamos", server.handleVamos)
 
 	log.Printf("[HTTP] Servidor ouvindo na porta %s (Tokyo Night Theme)", port)
 	log.Printf("[HTTP] Interface Web disponível em: http://localhost%s", port)
@@ -759,6 +818,287 @@ const indexHTML = `<!DOCTYPE html>
     .footer-highlight {
       color: var(--accent-cyan);
     }
+
+    /* Tabs Navigation */
+    .nav-tabs {
+      display: flex;
+      gap: 10px;
+      padding: 0 24px;
+      background: var(--bg-darker);
+      border-bottom: 1px solid var(--border-color);
+    }
+    .nav-tab {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      padding: 12px 18px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .nav-tab:hover {
+      color: var(--text-main);
+    }
+    .nav-tab.active {
+      color: var(--accent-cyan);
+      border-bottom-color: var(--accent-cyan);
+    }
+
+    /* VAMOS-T Playground Layout */
+    .vamos-container {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    @media (max-width: 1024px) {
+      .vamos-container {
+        grid-template-columns: 1fr;
+      }
+    }
+    .vamos-pane {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+    .vamos-pane-header {
+      background: var(--bg-darker);
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .vamos-pane-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent-purple);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .vamos-select {
+      background: var(--bg-card);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      outline: none;
+    }
+    .vamos-textarea {
+      flex: 1;
+      width: 100%;
+      min-height: 380px;
+      background: #14151e;
+      color: var(--accent-cyan);
+      border: none;
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.6;
+      resize: vertical;
+      outline: none;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-color) #14151e;
+    }
+    .vamos-output-pre {
+      min-height: 180px;
+      max-height: 240px;
+      background: #14151e;
+      color: var(--accent-green);
+      padding: 12px 16px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      overflow-y: auto;
+      white-space: pre;
+      border-bottom: 1px solid var(--border-subtle);
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-color) #14151e;
+    }
+    .vamos-vars-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      text-align: left;
+    }
+    .vamos-vars-table th {
+      background: var(--bg-darker);
+      padding: 6px 12px;
+      color: var(--accent-cyan);
+      border-bottom: 1px solid var(--border-color);
+      font-weight: 600;
+    }
+    .vamos-vars-table td {
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-main);
+    }
+    .vamos-vars-table tr:hover td {
+      background: var(--bg-card-hover);
+    }
+
+    /* Virtual TTY CRT Console Screen */
+    .tty-screen {
+      background: #090a10;
+      border: 1px solid #1f2335;
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--accent-green);
+      min-height: 80px;
+      max-height: 120px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.8);
+      position: relative;
+      line-height: 1.5;
+    }
+    .tty-cursor {
+      display: inline-block;
+      width: 8px;
+      height: 14px;
+      background: var(--accent-green);
+      vertical-align: middle;
+      animation: blink 1s step-end infinite;
+      box-shadow: 0 0 6px var(--accent-green);
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* 6-Trit LED Bus Meter */
+    .trit-meter {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 12px;
+      background: var(--bg-darker);
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+    }
+    .trit-led {
+      width: 38px;
+      height: 38px;
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      transition: all 0.15s ease-in-out;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+    .trit-led.pos {
+      background: rgba(125, 207, 255, 0.2);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(125, 207, 255, 0.5);
+    }
+    .trit-led.zer {
+      background: rgba(41, 46, 66, 0.5);
+      border-color: var(--border-color);
+      color: var(--text-muted);
+    }
+    .trit-led.neg {
+      background: rgba(247, 118, 142, 0.2);
+      border-color: var(--accent-red);
+      color: var(--accent-red);
+      box-shadow: 0 0 10px rgba(247, 118, 142, 0.5);
+    }
+    .trit-label {
+      font-size: 8px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    /* Execution Player Toolbar */
+    .player-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: #141520;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border-color);
+      flex-wrap: wrap;
+    }
+    .player-slider {
+      flex: 1;
+      height: 6px;
+      accent-color: var(--accent-cyan);
+      cursor: pointer;
+      min-width: 120px;
+    }
+    .btn-player {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+    .btn-player:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+    .btn-player.active {
+      background: var(--accent-cyan);
+      color: var(--bg-darker);
+      font-weight: 700;
+    }
+
+    /* Helper snippet button */
+    .btn-snippet {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-snippet:hover {
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+      background: rgba(125, 207, 255, 0.1);
+    }
+
+    .asm-line {
+      display: block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      line-height: 1.4;
+    }
+    .asm-line.active {
+      background: rgba(125, 207, 255, 0.25);
+      color: #ffffff;
+      font-weight: 700;
+      border-left: 3px solid var(--accent-cyan);
+    }
   </style>
 </head>
 <body>
@@ -786,102 +1126,264 @@ const indexHTML = `<!DOCTYPE html>
     </div>
   </header>
 
+  <!-- Navigation Tabs -->
+  <nav class="nav-tabs">
+    <button class="nav-tab active" id="tab-vamos">🧪 Laboratório &amp; Testes (VAMOS-T) <span style="font-size: 10px; background: var(--accent-purple); color: var(--bg-darker); padding: 1px 6px; border-radius: 10px; font-weight: 700;">VISUAL</span></button>
+    <button class="nav-tab" id="tab-terminal">💻 Terminal &amp; Telemetria</button>
+  </nav>
+
   <!-- Main Content Area -->
   <main>
-    <!-- Live Telemetry Quick Cards -->
-    <div class="telemetry-grid">
-      <div class="stat-card">
-        <span class="stat-label">Ciclo Clock</span>
-        <span class="stat-value" id="stat-cycle">0</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">Estado FSM</span>
-        <span class="stat-value purple" id="stat-state">FETCH_OPCODE</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">Prog. Counter (PC)</span>
-        <span class="stat-value" id="stat-pc">$0000</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">Acumulador (A)</span>
-        <span class="stat-value green" id="stat-acc">+0 (0z000)</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">Registrador X</span>
-        <span class="stat-value yellow" id="stat-regx">+0 (0z000)</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">Registrador Y</span>
-        <span class="stat-value orange" id="stat-regy">+0 (0z000)</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">Flags [Z | S | O]</span>
-        <span class="stat-value" id="stat-flags">[0 | 0 | 0]</span>
-      </div>
-    </div>
-
-    <!-- Quick Control Buttons Toolbar -->
-    <div class="toolbar-card">
-      <div class="btn-group">
-        <button class="btn btn-step" id="btn-step" title="Avança 1 ciclo de clock (s)">
-          <span>▶ Step (Ciclo)</span>
-          <span class="btn-kbd">Space</span>
-        </button>
-        <button class="btn btn-inst" id="btn-inst" title="Avança até a próxima instrução (i)">
-          <span>⏩ Instrução</span>
-          <span class="btn-kbd">I</span>
-        </button>
-        <button class="btn btn-run" id="btn-run" title="Executa em velocidade contínua (c)">
-          <span>⚡ Run (Cont)</span>
-          <span class="btn-kbd">C</span>
-        </button>
-        <button class="btn btn-dump" id="btn-dump" title="Exibe o conteúdo da memória RAM (m)">
-          <span>📋 Dump RAM</span>
-          <span class="btn-kbd">M</span>
-        </button>
-        <button class="btn btn-reset" id="btn-reset" title="Reinicia o processo da CPU (POST /api/reset)">
-          <span>🔄 Reset CPU</span>
-          <span class="btn-kbd">R</span>
-        </button>
-      </div>
-
-      <div class="btn-group">
-        <button class="btn btn-secondary" id="btn-clear" title="Limpar histórico do terminal">
-          <span>🧹 Limpar</span>
-        </button>
-        <button class="btn btn-secondary" id="btn-copy" title="Copiar saída do terminal">
-          <span>📄 Copiar</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Interactive Monospace Terminal Window -->
-    <div class="terminal-window">
-      <div class="terminal-header">
-        <div class="terminal-dots">
-          <div class="terminal-dot dot-red"></div>
-          <div class="terminal-dot dot-yellow"></div>
-          <div class="terminal-dot dot-green"></div>
+    <!-- Tab 1: Terminal & Telemetry View -->
+    <div id="view-terminal" style="display: none;">
+      <!-- Live Telemetry Quick Cards -->
+      <div class="telemetry-grid">
+        <div class="stat-card">
+          <span class="stat-label">Ciclo Clock</span>
+          <span class="stat-value" id="stat-cycle">0</span>
         </div>
-        <div class="terminal-title">emu6502t.py (Sessão Interativa - build/program.mem)</div>
-        <div class="terminal-actions">
-          <span class="terminal-link" id="link-autoscroll">Auto-scroll: ON</span>
+        <div class="stat-card">
+          <span class="stat-label">Estado FSM</span>
+          <span class="stat-value purple" id="stat-state">FETCH_OPCODE</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Prog. Counter (PC)</span>
+          <span class="stat-value" id="stat-pc">$0000</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Acumulador (A)</span>
+          <span class="stat-value green" id="stat-acc">+0 (0z000)</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Registrador X</span>
+          <span class="stat-value yellow" id="stat-regx">+0 (0z000)</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Registrador Y</span>
+          <span class="stat-value orange" id="stat-regy">+0 (0z000)</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Flags [Z | S | O]</span>
+          <span class="stat-value" id="stat-flags">[0 | 0 | 0]</span>
         </div>
       </div>
 
-      <div class="terminal-body" id="term-output">Carregando emulador ternário 6502-T...</div>
+      <!-- Quick Control Buttons Toolbar -->
+      <div class="toolbar-card" style="margin-top: 14px;">
+        <div class="btn-group">
+          <button class="btn btn-step" id="btn-step" title="Avança 1 ciclo de clock (s)">
+            <span>▶ Step (Ciclo)</span>
+            <span class="btn-kbd">Space</span>
+          </button>
+          <button class="btn btn-inst" id="btn-inst" title="Avança até a próxima instrução (i)">
+            <span>⏩ Instrução</span>
+            <span class="btn-kbd">I</span>
+          </button>
+          <button class="btn btn-run" id="btn-run" title="Executa em velocidade contínua (c)">
+            <span>⚡ Run (Cont)</span>
+            <span class="btn-kbd">C</span>
+          </button>
+          <button class="btn btn-dump" id="btn-dump" title="Exibe o conteúdo da memória RAM (m)">
+            <span>📋 Dump RAM</span>
+            <span class="btn-kbd">M</span>
+          </button>
+          <button class="btn btn-reset" id="btn-reset" title="Reinicia o processo da CPU (POST /api/reset)">
+            <span>🔄 Reset CPU</span>
+            <span class="btn-kbd">R</span>
+          </button>
+        </div>
 
-      <form class="terminal-footer" id="terminal-form" autocomplete="off">
-        <span class="prompt-label">(6502-T) &gt;</span>
-        <input 
-          type="text" 
-          id="cmd-input" 
-          class="cmd-input" 
-          placeholder="Digite um comando (s, i, c, m [end] [len], b [end], r, q) e pressione Enter..."
-          autofocus
-        />
-        <button type="submit" class="btn btn-step" style="padding: 4px 10px; font-size: 11px;">Enviar</button>
-      </form>
+        <div class="btn-group">
+          <button class="btn btn-secondary" id="btn-clear" title="Limpar histórico do terminal">
+            <span>🧹 Limpar</span>
+          </button>
+          <button class="btn btn-secondary" id="btn-copy" title="Copiar saída do terminal">
+            <span>📄 Copiar</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Interactive Monospace Terminal Window -->
+      <div class="terminal-window" style="margin-top: 14px;">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <div class="terminal-dot dot-red"></div>
+            <div class="terminal-dot dot-yellow"></div>
+            <div class="terminal-dot dot-green"></div>
+          </div>
+          <div class="terminal-title">emu6502t.py (Sessão Interativa - build/program.mem)</div>
+          <div class="terminal-actions">
+            <span class="terminal-link" id="link-autoscroll">Auto-scroll: ON</span>
+          </div>
+        </div>
+
+        <div class="terminal-body" id="term-output">Carregando emulador ternário 6502-T...</div>
+
+        <form class="terminal-footer" id="terminal-form" autocomplete="off">
+          <span class="prompt-label">(6502-T) &gt;</span>
+          <input 
+            type="text" 
+            id="cmd-input" 
+            class="cmd-input" 
+            placeholder="Digite um comando (s, i, c, m [end] [len], b [end], r, q) e pressione Enter..."
+            autofocus
+          />
+          <button type="submit" class="btn btn-step" style="padding: 4px 10px; font-size: 11px;">Enviar</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Tab 2: VAMOS-LANG Playground View -->
+    <div id="view-vamos" style="display: block;">
+      <div class="toolbar-card">
+        <div class="btn-group">
+          <button class="btn btn-step" id="btn-vamos-run" title="Compilar VAMOS-LANG e executar na CPU 6502-T">
+            <span>⚡ Compilar Código</span>
+            <span class="btn-kbd">Ctrl+Enter</span>
+          </button>
+          <select id="vamos-presets" class="vamos-select">
+            <option value="ola">🌟 Exemplo 1: Olá Mundo! (Texto &amp; TTY MMIO)</option>
+            <option value="olamindo">👾 Exemplo 2: olá mindo! (Solicitação literal)</option>
+            <option value="loop">🔄 Exemplo 3: Loop &amp; Acúmulo (Gauss)</option>
+            <option value="cond">⚖️ Exemplo 4: Flags &amp; Condicionais Ternários</option>
+            <option value="dozenal">🔢 Exemplo 5: Aritmética Duodecimal 0z</option>
+          </select>
+        </div>
+        <div class="header-badges">
+          <span class="badge" id="vamos-compile-status">Pronto para compilar</span>
+        </div>
+      </div>
+
+      <div class="vamos-container">
+        <!-- Editor Pane -->
+        <div class="vamos-pane">
+          <div class="vamos-pane-header">
+            <span class="vamos-pane-title">📝 Editor VAMOS-LANG (facrf/VAMOSLANG)</span>
+            <span style="font-size: 11px; color: var(--text-muted);">Sintaxe Go em Português</span>
+          </div>
+          <textarea id="vamos-code" class="vamos-textarea" spellcheck="false" placeholder="Digite seu código VAMOS-LANG aqui..."></textarea>
+
+          <!-- Quick Code Snippets Toolbar -->
+          <div style="background: var(--bg-darker); padding: 8px 12px; border-top: 1px solid var(--border-color); display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+            <span style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Inserir:</span>
+            <button type="button" class="btn-snippet" data-snip="escrever(&quot;Olá Mundo!\n&quot;)">escrever("...")</button>
+            <button type="button" class="btn-snippet" data-snip="se x &lt; 0 {&#10;    A = -1&#10;} senao {&#10;    A = 1&#10;}">se ... senao</button>
+            <button type="button" class="btn-snippet" data-snip="para i &lt; 5 {&#10;    total = total + i&#10;    i = i + 1&#10;}">para ...</button>
+            <button type="button" class="btn-snippet" data-snip="x := 0z011 // +13">0z (Base 12)</button>
+            <button type="button" class="btn-snippet" data-snip="parar()">parar()</button>
+            <span style="flex:1;"></span>
+            <button type="button" class="btn-snippet" id="btn-vamos-clear" style="color:var(--accent-red);">Limpar</button>
+          </div>
+        </div>
+
+        <!-- Output & Visual State Pane -->
+        <div class="vamos-pane">
+          <!-- Interactive Execution Player Toolbar -->
+          <div class="player-toolbar">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <button class="btn-player" id="v-btn-play" title="Reproduzir execução passo a passo animada">
+                <span id="v-play-icon">▶</span> <span id="v-play-text">Animar</span>
+              </button>
+              <button class="btn-player" id="v-btn-prev" title="Passo anterior">⏮</button>
+              <button class="btn-player" id="v-btn-next" title="Próximo passo">⏭</button>
+              <button class="btn-player" id="v-btn-start" title="Reiniciar do primeiro passo">🔄 Início</button>
+              <button class="btn-player" id="v-btn-end" title="Ir para o final da execução">⚡ Fim</button>
+            </div>
+            <div class="player-progress">
+              <span id="v-step-label" style="font-size: 11px; color: var(--accent-cyan); white-space: nowrap;">Passo 0 / 0</span>
+              <input type="range" id="v-step-slider" min="0" max="0" value="0" class="player-slider" title="Arraste para navegar no tempo de execução" />
+              <select id="v-speed-select" class="vamos-select" style="font-size:10px;">
+                <option value="150">150ms</option>
+                <option value="50">50ms (Rápido)</option>
+                <option value="350">350ms (Lento)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Virtual TTY CRT Console Screen -->
+          <div class="vamos-pane-header">
+            <span class="vamos-pane-title" style="color:var(--accent-green);">🟢 Saída TTY MMIO (Console Port $78 / 120)</span>
+            <span id="v-tty-badge" class="badge" style="font-size: 10px; color: var(--accent-green);">0 chars</span>
+          </div>
+          <div style="padding: 10px 14px; background: var(--bg-darker);">
+            <div class="tty-screen" id="v-tty-console">
+              <span id="v-tty-text">&gt; Clique em "Compilar Código" para iniciar...</span><span class="tty-cursor"></span>
+            </div>
+          </div>
+
+          <!-- 6-Trit LED Visualizer Bus -->
+          <div class="vamos-pane-header">
+            <span class="vamos-pane-title">💠 Barramento de Dados (6 Trits Balanceados do Acumulador)</span>
+            <span id="v-trit-value" class="badge" style="font-size: 10px;">+0 (0z000)</span>
+          </div>
+          <div style="padding: 8px 14px; background: var(--bg-darker);">
+            <div class="trit-meter">
+              <div class="trit-led zer" id="trit-5"><span class="trit-val">0</span><span class="trit-label">T5 (243)</span></div>
+              <div class="trit-led zer" id="trit-4"><span class="trit-val">0</span><span class="trit-label">T4 (81)</span></div>
+              <div class="trit-led zer" id="trit-3"><span class="trit-val">0</span><span class="trit-label">T3 (27)</span></div>
+              <div class="trit-led zer" id="trit-2"><span class="trit-val">0</span><span class="trit-label">T2 (9)</span></div>
+              <div class="trit-led zer" id="trit-1"><span class="trit-val">0</span><span class="trit-label">T1 (3)</span></div>
+              <div class="trit-led zer" id="trit-0"><span class="trit-val">0</span><span class="trit-label">T0 (1)</span></div>
+            </div>
+          </div>
+
+          <!-- Registers & Flags Grid -->
+          <div style="padding: 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: var(--bg-darker); border-top: 1px solid var(--border-color);">
+            <div class="stat-card">
+              <span class="stat-label">Ciclo Atual</span>
+              <span class="stat-value" id="v-stat-cycles">0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Prog. Counter (PC)</span>
+              <span class="stat-value" id="v-stat-pc">$0000</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Acumulador (A)</span>
+              <span class="stat-value green" id="v-stat-acc">+0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Registrador X</span>
+              <span class="stat-value yellow" id="v-stat-regx">+0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Registrador Y</span>
+              <span class="stat-value orange" id="v-stat-regy">+0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Flags [Z|S|O]</span>
+              <span class="stat-value" id="v-stat-flags">[0 | 0 | 0]</span>
+            </div>
+          </div>
+
+          <!-- Assembly 6502-T Inspector with Highlighting -->
+          <div class="vamos-pane-header" style="border-top: 1px solid var(--border-color);">
+            <span class="vamos-pane-title">⚙️ Assembly 6502-T Gerado &amp; Rastreamento</span>
+            <span id="vamos-asm-badge" class="badge" style="font-size: 10px;">0 palavras</span>
+          </div>
+          <div id="vamos-asm-output" class="vamos-output-pre">; O código assembly compilado aparecerá aqui...</div>
+
+          <!-- Variables in RAM Table -->
+          <div class="vamos-pane-header" style="border-top: 1px solid var(--border-color);">
+            <span class="vamos-pane-title">📦 Variáveis Alocadas na RAM</span>
+          </div>
+          <div style="max-height: 140px; overflow-y: auto;">
+            <table class="vamos-vars-table">
+              <thead>
+                <tr>
+                  <th>Variável</th>
+                  <th>Endereço RAM</th>
+                  <th>Decimal</th>
+                  <th>Duodecimal</th>
+                  <th>Trits (6T)</th>
+                </tr>
+              </thead>
+              <tbody id="vamos-vars-tbody">
+                <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 10px;">Nenhuma variável declarada</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
 
@@ -951,7 +1453,7 @@ const indexHTML = `<!DOCTYPE html>
 
         // FLAGS TERNÁRIAS: [Zero (Z): 0] [Sinal (S): 0] [Overflow (O): 0]
         const zMatch = text.match(/Zero\s*\(Z\):\s*([+\-]?\d+)/i);
-        const sMatch = text.match(/Sinal\s*\(S\):\s*([+\-]?\d+)/i);
+        const sMatch = text.match(/Sinal\s*\(S\):\s*([+\-0])/i);
         const oMatch = text.match(/Overflow\s*\(O\):\s*([+\-]?\d+)/i);
         if (zMatch && sMatch && oMatch) {
           elFlags.textContent = '[' + zMatch[1] + ' | ' + sMatch[1] + ' | ' + oMatch[1] + ']';
@@ -1075,7 +1577,7 @@ const indexHTML = `<!DOCTYPE html>
 
       // Global hotkeys when input is not focused
       window.addEventListener('keydown', (e) => {
-        if (document.activeElement === cmdInput) return;
+        if (document.activeElement === cmdInput || document.activeElement === document.getElementById('vamos-code')) return;
         if (e.ctrlKey || e.metaKey || e.altKey) return;
 
         const key = e.key.toLowerCase();
@@ -1096,6 +1598,319 @@ const indexHTML = `<!DOCTYPE html>
           resetCPU();
         }
       });
+
+      // Tab Navigation
+      const tabTerminal = document.getElementById('tab-terminal');
+      const tabVamos = document.getElementById('tab-vamos');
+      const viewTerminal = document.getElementById('view-terminal');
+      const viewVamos = document.getElementById('view-vamos');
+
+      tabTerminal.addEventListener('click', () => {
+        tabTerminal.classList.add('active');
+        tabVamos.classList.remove('active');
+        viewTerminal.style.display = 'block';
+        viewVamos.style.display = 'none';
+      });
+
+      tabVamos.addEventListener('click', () => {
+        tabVamos.classList.add('active');
+        tabTerminal.classList.remove('active');
+        viewTerminal.style.display = 'none';
+        viewVamos.style.display = 'block';
+      });
+
+      // VAMOS-LANG Playground & Visualizer
+      const vamosCode = document.getElementById('vamos-code');
+      const vamosPresets = document.getElementById('vamos-presets');
+      const btnVamosRun = document.getElementById('btn-vamos-run');
+      const vamosCompileStatus = document.getElementById('vamos-compile-status');
+      const vamosAsmOutput = document.getElementById('vamos-asm-output');
+      const vamosAsmBadge = document.getElementById('vamos-asm-badge');
+      const vStatCycles = document.getElementById('v-stat-cycles');
+      const vStatPc = document.getElementById('v-stat-pc');
+      const vStatAcc = document.getElementById('v-stat-acc');
+      const vStatRegx = document.getElementById('v-stat-regx');
+      const vStatRegy = document.getElementById('v-stat-regy');
+      const vStatFlags = document.getElementById('v-stat-flags');
+      const vamosVarsTbody = document.getElementById('vamos-vars-tbody');
+
+      const vBtnPlay = document.getElementById('v-btn-play');
+      const vPlayIcon = document.getElementById('v-play-icon');
+      const vPlayText = document.getElementById('v-play-text');
+      const vBtnPrev = document.getElementById('v-btn-prev');
+      const vBtnNext = document.getElementById('v-btn-next');
+      const vBtnStart = document.getElementById('v-btn-start');
+      const vBtnEnd = document.getElementById('v-btn-end');
+      const vStepLabel = document.getElementById('v-step-label');
+      const vStepSlider = document.getElementById('v-step-slider');
+      const vSpeedSelect = document.getElementById('v-speed-select');
+      const vTtyText = document.getElementById('v-tty-text');
+      const vTtyBadge = document.getElementById('v-tty-badge');
+      const vTritValue = document.getElementById('v-trit-value');
+
+      const presets = {
+        ola: "pacote principal\n\n// Exemplo VAMOS-T: Olá Mundo na CPU Ternária 6502-T\n// Emite cada caractere via MMIO (Porta 120) no Barramento de 6 Trits\nfuncao principal() {\n    escrever(\"Olá Mundo!\\n\")\n    parar()\n}",
+        olamindo: "pacote principal\n\n// Exemplo VAMOS-T: olá mindo! (Solicitação literal)\nfuncao principal() {\n    escrever(\"olá mindo!\\n\")\n    parar()\n}",
+        loop: "pacote principal\n\n// Exemplo VAMOS-T: Loop de Contagem e Acúmulo no 6502-T\nfuncao principal() {\n    limite := 5\n    total := 0\n    i := 0\n\n    para i < limite {\n        total = total + i\n        i = i + 1\n    }\n\n    A = total\n    parar()\n}",
+        cond: "pacote principal\n\n// Exemplo VAMOS-T: Lógica Condicional e Flags Ternárias\nfuncao principal() {\n    alvo := -12\n    status := 0\n\n    se alvo < 0 {\n        status = -1\n    } senao {\n        status = 1\n    }\n\n    A = status\n    parar()\n}",
+        dozenal: "pacote principal\n\n// Exemplo VAMOS-T: Aritmética Duodecimal (0z) e Atribuição de Registrador\nfuncao principal() {\n    a := 0z011       // +13 decimal\n    b := 0z0BB       // +143 decimal\n    soma := a + b    // +156 decimal (0z110)\n\n    se soma == 0z110 {\n        resultado := 0z042 // +50 decimal\n        A = resultado\n        X = A\n    } senao {\n        resultado := -1\n    }\n\n    parar()\n}"
+      };
+
+      vamosPresets.addEventListener('change', () => {
+        const val = vamosPresets.value;
+        if (presets[val]) {
+          vamosCode.value = presets[val];
+          runVamos(false);
+        }
+      });
+      // Set initial code to "ola"
+      vamosCode.value = presets.ola;
+
+      // Snippet helpers
+      document.querySelectorAll('.btn-snippet').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const snip = btn.getAttribute('data-snip');
+          if (snip) {
+            const code = snip.replace(/\\n/g, '\n');
+            const start = vamosCode.selectionStart;
+            const end = vamosCode.selectionEnd;
+            vamosCode.value = vamosCode.value.substring(0, start) + code + vamosCode.value.substring(end);
+            vamosCode.focus();
+            vamosCode.selectionStart = vamosCode.selectionEnd = start + code.length;
+          }
+        });
+      });
+      const btnClear = document.getElementById('btn-vamos-clear');
+      if (btnClear) {
+        btnClear.addEventListener('click', () => {
+          vamosCode.value = '';
+          vamosCode.focus();
+        });
+      }
+
+      // Step & Timeline Execution State
+      let currentTrace = [];
+      let currentStepIndex = 0;
+      let playTimer = null;
+
+      function renderStep(idx) {
+        if (!currentTrace || currentTrace.length === 0) return;
+        if (idx < 0) idx = 0;
+        if (idx >= currentTrace.length) idx = currentTrace.length - 1;
+        currentStepIndex = idx;
+
+        const step = currentTrace[idx];
+        vStepSlider.value = idx;
+        vStepLabel.textContent = 'Passo ' + (idx + 1) + ' / ' + currentTrace.length + ' (Ciclo ' + step.cycle + ')';
+
+        vStatCycles.textContent = step.cycle;
+        vStatPc.textContent = '$' + (step.pc || 0).toString(16).padStart(4, '0');
+        vStatAcc.textContent = (step.acc >= 0 ? '+' : '') + step.acc + ' (' + (step.acc_dozenal || '0z000') + ')';
+        vStatRegx.textContent = (step.reg_x >= 0 ? '+' : '') + step.reg_x;
+        vStatRegy.textContent = (step.reg_y >= 0 ? '+' : '') + step.reg_y;
+        vStatFlags.textContent = '[' + (step.flag_zero ? 1 : 0) + ' | ' + (step.flag_sign || 0) + ' | ' + (step.flag_overflow ? 1 : 0) + ']';
+
+        // TTY Console
+        if (step.stdout && step.stdout.length > 0) {
+          vTtyText.textContent = '> ' + step.stdout;
+          vTtyBadge.textContent = step.stdout.length + ' chars';
+        } else {
+          vTtyText.textContent = '> [Aguardando saída TTY MMIO...]';
+          vTtyBadge.textContent = '0 chars';
+        }
+
+        // 6-Trit LEDs
+        const trits = step.acc_trits || [0, 0, 0, 0, 0, 0];
+        vTritValue.textContent = (step.acc >= 0 ? '+' : '') + step.acc + ' (' + (step.acc_dozenal || '0z000') + ')';
+        for (let i = 0; i < 6; i++) {
+          const led = document.getElementById('trit-' + i);
+          if (led) {
+            const val = trits[i] || 0;
+            led.className = 'trit-led ' + (val > 0 ? 'pos' : (val < 0 ? 'neg' : 'zer'));
+            const valSpan = led.querySelector('.trit-val');
+            if (valSpan) valSpan.textContent = (val > 0 ? '+1' : (val < 0 ? '-1' : '0'));
+          }
+        }
+
+        // Assembly highlighting
+        const lines = vamosAsmOutput.querySelectorAll('.asm-line');
+        lines.forEach(lineEl => {
+          const lpc = parseInt(lineEl.getAttribute('data-pc'), 10);
+          if (lpc === step.pc) {
+            lineEl.classList.add('active');
+            lineEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          } else {
+            lineEl.classList.remove('active');
+          }
+        });
+      }
+
+      function stopPlay() {
+        if (playTimer) {
+          clearInterval(playTimer);
+          playTimer = null;
+          vBtnPlay.classList.remove('active');
+          vPlayIcon.textContent = '▶';
+          vPlayText.textContent = 'Animar';
+        }
+      }
+
+      function startPlay() {
+        stopPlay();
+        if (!currentTrace || currentTrace.length === 0) return;
+        if (currentStepIndex >= currentTrace.length - 1) {
+          currentStepIndex = 0;
+          renderStep(0);
+        }
+        vBtnPlay.classList.add('active');
+        vPlayIcon.textContent = '⏸';
+        vPlayText.textContent = 'Pausar';
+
+        const speed = parseInt(vSpeedSelect.value, 10) || 150;
+        playTimer = setInterval(() => {
+          if (currentStepIndex < currentTrace.length - 1) {
+            renderStep(currentStepIndex + 1);
+          } else {
+            stopPlay();
+          }
+        }, speed);
+      }
+
+      vBtnPlay.addEventListener('click', () => {
+        if (playTimer) stopPlay();
+        else startPlay();
+      });
+      vBtnPrev.addEventListener('click', () => {
+        stopPlay();
+        renderStep(currentStepIndex - 1);
+      });
+      vBtnNext.addEventListener('click', () => {
+        stopPlay();
+        renderStep(currentStepIndex + 1);
+      });
+      vBtnStart.addEventListener('click', () => {
+        stopPlay();
+        renderStep(0);
+      });
+      vBtnEnd.addEventListener('click', () => {
+        stopPlay();
+        renderStep(currentTrace.length - 1);
+      });
+      vStepSlider.addEventListener('input', () => {
+        stopPlay();
+        renderStep(parseInt(vStepSlider.value, 10));
+      });
+
+      function renderAssemblyWithPC(asmText) {
+        let pc = 0;
+        const lines = asmText.split('\n');
+        let html = '';
+        lines.forEach((line) => {
+          const trimmed = line.trim();
+          let linePC = pc;
+          let isInst = false;
+          if (trimmed && !trimmed.startsWith('//') && !trimmed.startsWith(';') && !trimmed.endsWith(':')) {
+            isInst = true;
+            const parts = trimmed.split(/\s+/);
+            if (parts.length > 1 && !parts[1].startsWith('//') && !parts[1].startsWith(';')) {
+              pc += 2;
+            } else {
+              pc += 1;
+            }
+          }
+          const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          html += '<span class="asm-line" data-pc="' + (isInst ? linePC : -1) + '">' + escaped + '</span>';
+        });
+        vamosAsmOutput.innerHTML = html;
+      }
+
+      async function runVamos(autoPlay) {
+        const code = vamosCode.value.trim();
+        if (!code) return;
+
+        stopPlay();
+        vamosCompileStatus.textContent = 'COMPILANDO...';
+        vamosCompileStatus.style.borderColor = 'var(--accent-yellow)';
+        vamosCompileStatus.style.color = 'var(--accent-yellow)';
+
+        try {
+          const res = await fetch('/api/vamos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source: code })
+          });
+          const data = await res.json();
+
+          if (!res.ok || !data.success) {
+            const err = data.error || 'Erro na compilação';
+            vamosCompileStatus.textContent = 'ERRO';
+            vamosCompileStatus.style.borderColor = 'var(--accent-red)';
+            vamosCompileStatus.style.color = 'var(--accent-red)';
+            vamosAsmOutput.textContent = '; [ERRO DE COMPILAÇÃO]\n; ' + err;
+            vamosAsmBadge.textContent = 'Erro';
+            return;
+          }
+
+          vamosCompileStatus.textContent = 'SUCESSO';
+          vamosCompileStatus.style.borderColor = 'var(--accent-green)';
+          vamosCompileStatus.style.color = 'var(--accent-green)';
+
+          renderAssemblyWithPC(data.assembly || '; Sem código gerado');
+          vamosAsmBadge.textContent = (data.words_count || 0) + ' palavras';
+
+          const ex = data.execution;
+          if (ex) {
+            currentTrace = ex.trace || [];
+            vStepSlider.min = 0;
+            vStepSlider.max = Math.max(0, currentTrace.length - 1);
+            vStepSlider.value = 0;
+
+            // Variables table
+            const vars = ex.variables || {};
+            const keys = Object.keys(vars);
+            if (keys.length === 0) {
+              vamosVarsTbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 10px;">Nenhuma variável declarada</td></tr>';
+            } else {
+              let rowsHtml = '';
+              for (const k of keys) {
+                const item = vars[k];
+                const decSign = item.decimal >= 0 ? '+' : '';
+                rowsHtml += '<tr>' +
+                  '<td><strong style="color:var(--accent-cyan);">' + k + '</strong></td>' +
+                  '<td>$' + item.address.toString(16).padStart(4, '0') + ' (' + item.address + ')</td>' +
+                  '<td>' + decSign + item.decimal + '</td>' +
+                  '<td style="color:var(--accent-purple);">' + item.dozenal + '</td>' +
+                  '<td style="color:var(--accent-cyan);">' + (item.trits || '') + '</td>' +
+                '</tr>';
+              }
+              vamosVarsTbody.innerHTML = rowsHtml;
+            }
+
+            if (autoPlay) {
+              startPlay();
+            } else {
+              renderStep(currentTrace.length - 1);
+            }
+          }
+        } catch (err) {
+          vamosCompileStatus.textContent = 'ERRO HTTP';
+          vamosCompileStatus.style.borderColor = 'var(--accent-red)';
+          vamosCompileStatus.style.color = 'var(--accent-red)';
+          vamosAsmOutput.textContent = '; [ERRO HTTP]\n; ' + err.message;
+        }
+      }
+
+      btnVamosRun.addEventListener('click', () => runVamos(true));
+
+      vamosCode.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          runVamos(true);
+        }
+      });
+
+      // Auto-compile default preset on startup
+      runVamos(false);
     })();
   </script>
 </body>
