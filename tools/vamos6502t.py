@@ -71,8 +71,9 @@ class VamosLexer:
 
 
 class VamosCompiler6502T:
-    def __init__(self, var_base_addr: int = 64):
+    def __init__(self, var_base_addr: int = 180, tty_port: int = 300):
         self.var_base = var_base_addr
+        self.tty_port = tty_port
         self.variables: Dict[str, int] = {}
         self.next_var_addr = var_base_addr
         self.label_counter = 0
@@ -209,14 +210,14 @@ class VamosCompiler6502T:
                     code = ord(ch)
                     ch_disp = repr(ch)[1:-1]
                     self.asm.append(f"    LDA #{code} // char '{ch_disp}'")
-                    self.asm.append("    STA 120 // TTY_OUT")
+                    self.asm.append(f"    STA {self.tty_port} // TTY_OUT")
             elif arg_tok.type == "IDENT":
                 addr = self._get_var_addr(arg_tok.value)
                 self.asm.append(f"    LDA {addr} // {arg_tok.value}")
-                self.asm.append("    STA 120 // TTY_OUT")
+                self.asm.append(f"    STA {self.tty_port} // TTY_OUT")
             else:
                 self.asm.append(f"    LDA #{arg_tok.value}")
-                self.asm.append("    STA 120 // TTY_OUT")
+                self.asm.append(f"    STA {self.tty_port} // TTY_OUT")
 
             self._consume("RPAREN")
             return
@@ -436,9 +437,10 @@ def main():
     parser.add_argument("file", nargs="?", default=None, help="Arquivo-fonte .vamos")
     parser.add_argument("-o", "--output", default=None, help="Arquivo de saída (.s, .asm ou .mem)")
     parser.add_argument("-f", "--format", choices=["asm", "mem"], default="asm", help="Formato de saída (padrão: asm)")
-    parser.add_argument("--var-base", type=int, default=64, help="Endereço inicial da memória RAM para variáveis (padrão: 64)")
+    parser.add_argument("--var-base", type=int, default=180, help="Endereço inicial da memória RAM para variáveis (padrão: 180)")
+    parser.add_argument("--tty-port", type=int, default=300, help="Endereço MMIO para escrita TTY (padrão: 300)")
     parser.add_argument("-r", "--run", action="store_true", help="Executa o programa compilado no emulador 6502-T")
-    parser.add_argument("--cycles", type=int, default=300, help="Limite de ciclos em execução (padrão: 300)")
+    parser.add_argument("--cycles", type=int, default=1000, help="Limite de ciclos em execução (padrão: 1000)")
     parser.add_argument("--json", action="store_true", help="Retorna saída estruturada em JSON")
 
     args = parser.parse_args()
@@ -478,7 +480,7 @@ def main():
         }
         """
 
-    compiler = VamosCompiler6502T(var_base_addr=args.var_base)
+    compiler = VamosCompiler6502T(var_base_addr=args.var_base, tty_port=args.tty_port)
     try:
         asm_code = compiler.compile(src)
     except Exception as e:
@@ -507,7 +509,7 @@ def main():
     # Execução opcional no emulador
     exec_info = {}
     if args.run or args.json:
-        cpu = CPU6502T(mem_size=128)
+        cpu = CPU6502T(mem_size=1024)
         for addr, (b_str, _) in assembler.machine_code.items():
             cpu.memory[addr] = trits_to_int(bin12_to_trits(b_str))
 
@@ -519,7 +521,7 @@ def main():
             # Captura snapshot no início de cada instrução
             if cpu.state == CPU6502T.S_FETCH_OPCODE:
                 # Condição de parada (HLT: JMP HLT)
-                if cpu.memory[cpu.pc % 128] == -292 and cpu.memory[(cpu.pc + 1) % 128] == cpu.pc:
+                if cpu.memory[cpu.pc % 1024] == -292 and cpu.memory[(cpu.pc + 1) % 1024] == cpu.pc:
                     break
 
                 if len(trace_steps) < 250:
@@ -540,8 +542,8 @@ def main():
             cpu.step_cycle()
             cycles_run += 1
 
-            # Captura escrita no terminal TTY (MMIO Porta 120)
-            if cpu.write_en and (cpu.addr_bus % 128) == 120:
+            # Captura escrita no terminal TTY (MMIO Porta configurada)
+            if cpu.write_en and (cpu.addr_bus % 1024) == compiler.tty_port:
                 char_code = cpu.data_out
                 if 0 <= char_code <= 255:
                     tty_out.append(chr(char_code))
@@ -569,7 +571,7 @@ def main():
         # Mapeia variáveis
         var_dump = {}
         for vname, vaddr in compiler.variables.items():
-            val = cpu.memory[vaddr]
+            val = cpu.memory[vaddr % 1024]
             var_dump[vname] = {
                 "address": vaddr,
                 "decimal": val,

@@ -259,9 +259,14 @@ func (s *Server) handleVamos(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(strings.TrimSpace(source), "{") {
 		var req struct {
 			Source string `json:"source"`
+			Code   string `json:"code"`
 		}
-		if err := json.Unmarshal(body, &req); err == nil && req.Source != "" {
-			source = req.Source
+		if err := json.Unmarshal(body, &req); err == nil {
+			if req.Source != "" {
+				source = req.Source
+			} else if req.Code != "" {
+				source = req.Code
+			}
 		}
 	}
 
@@ -1099,6 +1104,99 @@ const indexHTML = `<!DOCTYPE html>
       font-weight: 700;
       border-left: 3px solid var(--accent-cyan);
     }
+
+    /* Manual & Educational Guide Tab */
+    .manual-hero {
+      background: linear-gradient(135deg, rgba(187, 154, 247, 0.12), rgba(125, 207, 255, 0.08));
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 18px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .manual-hero-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .manual-hero-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+    .manual-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 16px;
+      margin-top: 14px;
+    }
+    .manual-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+    .manual-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent-purple);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 8px;
+    }
+    .manual-card p, .manual-card li {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+    .manual-card code {
+      background: var(--bg-darker);
+      color: var(--accent-purple);
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 11px;
+      border: 1px solid var(--border-subtle);
+    }
+    .manual-code-block {
+      background: #12131c;
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--accent-green);
+      overflow-x: auto;
+      white-space: pre;
+      line-height: 1.5;
+    }
+    .manual-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-top: 6px;
+    }
+    .manual-table th {
+      background: var(--bg-darker);
+      padding: 5px 8px;
+      color: var(--accent-cyan);
+      border-bottom: 1px solid var(--border-color);
+      text-align: left;
+    }
+    .manual-table td {
+      padding: 5px 8px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-main);
+    }
   </style>
 </head>
 <body>
@@ -1128,7 +1226,8 @@ const indexHTML = `<!DOCTYPE html>
 
   <!-- Navigation Tabs -->
   <nav class="nav-tabs">
-    <button class="nav-tab active" id="tab-vamos">🧪 Laboratório &amp; Testes (VAMOS-T) <span style="font-size: 10px; background: var(--accent-purple); color: var(--bg-darker); padding: 1px 6px; border-radius: 10px; font-weight: 700;">VISUAL</span></button>
+    <button class="nav-tab active" id="tab-vamos">🧪 Laboratório VAMOS-T <span style="font-size: 10px; background: var(--accent-purple); color: var(--bg-darker); padding: 1px 6px; border-radius: 10px; font-weight: 700;">VISUAL</span></button>
+    <button class="nav-tab" id="tab-manual">📖 Manual &amp; Exemplos</button>
     <button class="nav-tab" id="tab-terminal">💻 Terminal &amp; Telemetria</button>
   </nav>
 
@@ -1243,10 +1342,11 @@ const indexHTML = `<!DOCTYPE html>
           </button>
           <select id="vamos-presets" class="vamos-select">
             <option value="ola">🌟 Exemplo 1: Olá Mundo! (Texto &amp; TTY MMIO)</option>
-            <option value="olamindo">👾 Exemplo 2: olá mindo! (Solicitação literal)</option>
-            <option value="loop">🔄 Exemplo 3: Loop &amp; Acúmulo (Gauss)</option>
-            <option value="cond">⚖️ Exemplo 4: Flags &amp; Condicionais Ternários</option>
-            <option value="dozenal">🔢 Exemplo 5: Aritmética Duodecimal 0z</option>
+            <option value="calc">🧮 Exemplo 2: Calculadora Duodecimal (Base 12)</option>
+            <option value="trit">💠 Exemplo 3: Trit Balanceado &amp; Negação Simétrica</option>
+            <option value="loop">🔄 Exemplo 4: Loop &amp; Acúmulo (Gauss 1..5)</option>
+            <option value="cond">⚖️ Exemplo 5: Flags &amp; Condicionais Ternários</option>
+            <option value="olamindo">👾 Exemplo 6: olá mindo! (Solicitação literal)</option>
           </select>
         </div>
         <div class="header-badges">
@@ -1302,7 +1402,7 @@ const indexHTML = `<!DOCTYPE html>
 
           <!-- Virtual TTY CRT Console Screen -->
           <div class="vamos-pane-header">
-            <span class="vamos-pane-title" style="color:var(--accent-green);">🟢 Saída TTY MMIO (Console Port $78 / 120)</span>
+            <span class="vamos-pane-title" style="color:var(--accent-green);">🟢 Saída TTY MMIO (Console Port 300 / 0z210)</span>
             <span id="v-tty-badge" class="badge" style="font-size: 10px; color: var(--accent-green);">0 chars</span>
           </div>
           <div style="padding: 10px 14px; background: var(--bg-darker);">
@@ -1381,6 +1481,177 @@ const indexHTML = `<!DOCTYPE html>
                 <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 10px;">Nenhuma variável declarada</td></tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Manual & Exemplos Didáticos (VAMOS-LANG) -->
+    <div id="view-manual" style="display: none;">
+      <!-- Hero Banner -->
+      <div class="manual-hero">
+        <div class="manual-hero-title">
+          <span>📚</span> Manual Rápido VAMOS-LANG // CPU 6502-T
+        </div>
+        <div class="manual-hero-desc">
+          Guia introdutório para cursos e laboratórios: aprenda como funcionam a <strong>Lógica Ternária Balanceada {-1, 0, +1}</strong> e o <strong>Sistema Duodecimal (Base 12)</strong> no clássico microprocessador MOS 6502 reinventado.
+        </div>
+      </div>
+
+      <!-- Fundamentos Teóricos (3 Cards) -->
+      <div class="manual-grid">
+        <!-- Card 1: O que é o Trit -->
+        <div class="manual-card">
+          <div class="manual-card-title">
+            <span>💠 O que é o Trit Balanceado?</span>
+            <span style="font-size: 11px; color: var(--accent-cyan);">{-1, 0, +1}</span>
+          </div>
+          <p>
+            Diferente do <em>bit</em> binário ({0, 1}), o <strong>Trit</strong> possui 3 estados físicos comutados por transistores NPN/PNP em push-pull:
+          </p>
+          <ul style="padding-left: 18px; display: flex; flex-direction: column; gap: 4px;">
+            <li><strong>+1 (POS):</strong> +5V (Transistor NPN saturado)</li>
+            <li><strong> 0 (ZER):</strong>  0V (Ambos transistores em corte)</li>
+            <li><strong>-1 (NEG):</strong> -5V (Transistor PNP saturado)</li>
+          </ul>
+          <p>
+            No barramento de dados de <strong>6 trits</strong>, cada posição possui peso exponencial de potências de 3:
+          </p>
+          <table class="manual-table">
+            <thead>
+              <tr><th>Trit</th><th>T5</th><th>T4</th><th>T3</th><th>T2</th><th>T1</th><th>T0</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Peso</td><td>243</td><td>81</td><td>27</td><td>9</td><td>3</td><td>1</td></tr>
+            </tbody>
+          </table>
+          <p style="font-size: 11px; color: var(--accent-green); margin-top: 4px;">
+            ★ <strong>Vantagem Revolucionária:</strong> A negação simétrica é direta: para inverter o sinal de um número, basta inverter cada trit (+ vira -, - vira +). Não há necessidade de bit de sinal nem complemento de dois assimétrico!
+          </p>
+        </div>
+
+        <!-- Card 2: Aritmética Duodecimal (Base 12) -->
+        <div class="manual-card">
+          <div class="manual-card-title">
+            <span>🔢 A Mágica da Base 12 (0z...)</span>
+            <span style="font-size: 11px; color: var(--accent-purple);">Radix 12</span>
+          </div>
+          <p>
+            Para facilitar a leitura humana da telemetria e das instruções, o 6502-T utiliza numeração <strong>Duodecimal (Base 12)</strong> com prefixo <code>0z</code>.
+          </p>
+          <p>
+            O número 12 possui quatro divisores limpos {2, 3, 4, 6}, gerando frações muito mais naturais que a base 10. Seus algarismos são:
+            <code>0, 1, 2, 3, 4, 5, 6, 7, 8, 9, A (=10), B (=11)</code>.
+          </p>
+          <table class="manual-table">
+            <thead>
+              <tr><th>Duodecimal</th><th>Cálculo</th><th>Decimal</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>0z00A</code></td><td>10</td><td>+10</td></tr>
+              <tr><td><code>0z00B</code></td><td>11</td><td>+11</td></tr>
+              <tr><td><code>0z010</code></td><td>1×12 + 0</td><td>+12</td></tr>
+              <tr><td><code>0z011</code></td><td>1×12 + 1</td><td>+13</td></tr>
+              <tr><td><code>0z042</code></td><td>4×12 + 2</td><td>+50</td></tr>
+              <tr><td><code>0z0BB</code></td><td>11×12 + 11</td><td>+143</td></tr>
+              <tr><td><code>0z110</code></td><td>1×144 + 1×12 + 0</td><td>+156</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Card 3: Sintaxe VAMOS-LANG -->
+        <div class="manual-card">
+          <div class="manual-card-title">
+            <span>⚡ Sintaxe Essencial de VAMOS</span>
+            <span style="font-size: 11px; color: var(--accent-yellow);">Go em Português</span>
+          </div>
+          <p>
+            VAMOS-LANG é uma linguagem simplificada estilo Go com palavras-chave em Português, transpilada diretamente para Assembly 6502-T:
+          </p>
+          <ul style="padding-left: 18px; display: flex; flex-direction: column; gap: 4px;">
+            <li><code>pacote principal</code> / <code>funcao principal() { ... }</code></li>
+            <li><code>a := 0z010</code> ou <code>var x = 5</code> (alocadas na RAM)</li>
+            <li><code>soma := a + b</code> e <code>sub := a - b</code></li>
+            <li><code>se cond { ... } senao { ... }</code> (desvios condicionais)</li>
+            <li><code>para cond { ... }</code> (laços de repetição)</li>
+            <li><code>A = resultado</code> e <code>X = A</code> (registradores)</li>
+            <li><code>escrever("Olá!\n")</code> (MMIO porta 300 / 0z210)</li>
+            <li><code>parar()</code> (termina o programa)</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Galeria de Exemplos Práticos Interativos -->
+      <div style="margin-top: 20px;">
+        <h3 style="font-size: 16px; color: var(--accent-cyan); display: flex; align-items: center; gap: 8px;">
+          <span>🧪</span> Exemplos Didáticos Prontos para Testar
+        </h3>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+          Clique em "▶ Carregar no Laboratório" para enviar o código diretamente ao editor, compilar e assistir à execução ciclo a ciclo.
+        </p>
+
+        <div class="manual-grid" style="margin-top: 12px;">
+          <!-- Exemplo 1: Calculadora Duodecimal -->
+          <div class="manual-card">
+            <div class="manual-card-title">
+              <span>🧮 1. Calculadora Duodecimal (Base 12)</span>
+              <button class="btn btn-step btn-load-code" data-preset="calc">▶ Carregar no Laboratório</button>
+            </div>
+            <p>Realiza operações aritméticas diretamente usando numeração duodecimal <code>0z</code> e reflete o resultado no Acumulador e na tela CRT.</p>
+            <div class="manual-code-block">num1 := 0z010       // +12 decimal
+num2 := 0z005       // +5 decimal
+soma := num1 + num2 // +17 decimal (0z015)
+resultado := soma - 0z008 // +9 decimal</div>
+          </div>
+
+          <!-- Exemplo 2: Trit Balanceado e Inversão de Sinal -->
+          <div class="manual-card">
+            <div class="manual-card-title">
+              <span>💠 2. O Poder do Trit (Inversão Simétrica)</span>
+              <button class="btn btn-step btn-load-code" data-preset="trit">▶ Carregar no Laboratório</button>
+            </div>
+            <p>Inverte o sinal de um número positivo para negativo sem complicação matemática. Observe a iluminação dos LEDs rosa/vermelho (-1) no barramento!</p>
+            <div class="manual-code-block">valor := 0z042       // +50 decimal
+invertido := 0 - valor // -50 decimal (Simetria pura!)
+A = invertido</div>
+          </div>
+
+          <!-- Exemplo 3: Contador e Loop de Gauss -->
+          <div class="manual-card">
+            <div class="manual-card-title">
+              <span>🔄 3. Contador &amp; Somatório de Gauss (1..5)</span>
+              <button class="btn btn-step btn-load-code" data-preset="loop">▶ Carregar no Laboratório</button>
+            </div>
+            <p>Utiliza a instrução de repetição <code>para i &lt; limite</code> para iterar 5 vezes, somando valores progressivamente na RAM.</p>
+            <div class="manual-code-block">para i &lt; limite {
+    total = total + i
+    i = i + 1
+}</div>
+          </div>
+
+          <!-- Exemplo 4: Tomada de Decisão com se / senao -->
+          <div class="manual-card">
+            <div class="manual-card-title">
+              <span>⚖️ 4. Decisão &amp; Flags Ternárias (se / senao)</span>
+              <button class="btn btn-step btn-load-code" data-preset="cond">▶ Carregar no Laboratório</button>
+            </div>
+            <p>Testa o sinal do número com desvio condicional ternário, ativando as flags de Status Zero (Z) e Sign (S).</p>
+            <div class="manual-code-block">se alvo &lt; 0 {
+    status = -1
+} senao {
+    status = 1
+}</div>
+          </div>
+
+          <!-- Exemplo 5: Olá Mundo no Console CRT TTY -->
+          <div class="manual-card">
+            <div class="manual-card-title">
+              <span>🌟 5. Olá Mundo! (Console CRT MMIO)</span>
+              <button class="btn btn-step btn-load-code" data-preset="ola">▶ Carregar no Laboratório</button>
+            </div>
+            <p>Escreve uma cadeia de caracteres na porta de terminal mapeada em memória (MMIO porta 300 / 0z210), simulando um terminal CRT com fósforo verde.</p>
+            <div class="manual-code-block">escrever("Olá Mundo!\n")
+parar()</div>
           </div>
         </div>
       </div>
@@ -1600,24 +1871,26 @@ const indexHTML = `<!DOCTYPE html>
       });
 
       // Tab Navigation
-      const tabTerminal = document.getElementById('tab-terminal');
       const tabVamos = document.getElementById('tab-vamos');
-      const viewTerminal = document.getElementById('view-terminal');
+      const tabManual = document.getElementById('tab-manual');
+      const tabTerminal = document.getElementById('tab-terminal');
       const viewVamos = document.getElementById('view-vamos');
+      const viewManual = document.getElementById('view-manual');
+      const viewTerminal = document.getElementById('view-terminal');
 
-      tabTerminal.addEventListener('click', () => {
-        tabTerminal.classList.add('active');
-        tabVamos.classList.remove('active');
-        viewTerminal.style.display = 'block';
-        viewVamos.style.display = 'none';
-      });
+      function switchTab(target) {
+        tabVamos.classList.toggle('active', target === 'vamos');
+        tabManual.classList.toggle('active', target === 'manual');
+        tabTerminal.classList.toggle('active', target === 'terminal');
 
-      tabVamos.addEventListener('click', () => {
-        tabVamos.classList.add('active');
-        tabTerminal.classList.remove('active');
-        viewTerminal.style.display = 'none';
-        viewVamos.style.display = 'block';
-      });
+        viewVamos.style.display = (target === 'vamos') ? 'block' : 'none';
+        viewManual.style.display = (target === 'manual') ? 'block' : 'none';
+        viewTerminal.style.display = (target === 'terminal') ? 'block' : 'none';
+      }
+
+      tabVamos.addEventListener('click', () => switchTab('vamos'));
+      tabManual.addEventListener('click', () => switchTab('manual'));
+      tabTerminal.addEventListener('click', () => switchTab('terminal'));
 
       // VAMOS-LANG Playground & Visualizer
       const vamosCode = document.getElementById('vamos-code');
@@ -1649,12 +1922,27 @@ const indexHTML = `<!DOCTYPE html>
       const vTritValue = document.getElementById('v-trit-value');
 
       const presets = {
-        ola: "pacote principal\n\n// Exemplo VAMOS-T: Olá Mundo na CPU Ternária 6502-T\n// Emite cada caractere via MMIO (Porta 120) no Barramento de 6 Trits\nfuncao principal() {\n    escrever(\"Olá Mundo!\\n\")\n    parar()\n}",
-        olamindo: "pacote principal\n\n// Exemplo VAMOS-T: olá mindo! (Solicitação literal)\nfuncao principal() {\n    escrever(\"olá mindo!\\n\")\n    parar()\n}",
+        ola: "pacote principal\n\n// Exemplo VAMOS-T: Olá Mundo na CPU Ternária 6502-T\n// Emite cada caractere via MMIO (Porta 300 / 0z210) no Barramento de 6 Trits\nfuncao principal() {\n    escrever(\"Olá Mundo!\\n\")\n    parar()\n}",
+        calc: "pacote principal\n\n// Exemplo VAMOS-T: Calculadora Duodecimal (Base 12) no 6502-T\n// Demonstra soma e subtração com literais duodecimais 0z...\nfuncao principal() {\n    // 0z010 = 12 em decimal, 0z005 = 5 em decimal\n    num1 := 0z010\n    num2 := 0z005\n\n    // Soma: 12 + 5 = 17 (em base 12: 0z015)\n    soma := num1 + num2\n\n    // Subtração: 17 - 8 = 9 (0z009)\n    resultado := soma - 0z008\n\n    A = resultado\n    escrever(\"Calc Base 12: OK!\\n\")\n    parar()\n}",
+        trit: "pacote principal\n\n// Exemplo VAMOS-T: Lógica Ternária Balanceada {-1, 0, +1}\n// Demonstra negação unária simétrica e flags de sinal\nfuncao principal() {\n    // Carrega um valor positivo (+50 decimal / 0z042)\n    valor := 0z042\n\n    // Inversão simétrica sem complemento de dois!\n    invertido := 0 - valor\n\n    A = invertido\n    escrever(\"Trit Balanceado Simetrico!\\n\")\n    parar()\n}",
         loop: "pacote principal\n\n// Exemplo VAMOS-T: Loop de Contagem e Acúmulo no 6502-T\nfuncao principal() {\n    limite := 5\n    total := 0\n    i := 0\n\n    para i < limite {\n        total = total + i\n        i = i + 1\n    }\n\n    A = total\n    parar()\n}",
         cond: "pacote principal\n\n// Exemplo VAMOS-T: Lógica Condicional e Flags Ternárias\nfuncao principal() {\n    alvo := -12\n    status := 0\n\n    se alvo < 0 {\n        status = -1\n    } senao {\n        status = 1\n    }\n\n    A = status\n    parar()\n}",
-        dozenal: "pacote principal\n\n// Exemplo VAMOS-T: Aritmética Duodecimal (0z) e Atribuição de Registrador\nfuncao principal() {\n    a := 0z011       // +13 decimal\n    b := 0z0BB       // +143 decimal\n    soma := a + b    // +156 decimal (0z110)\n\n    se soma == 0z110 {\n        resultado := 0z042 // +50 decimal\n        A = resultado\n        X = A\n    } senao {\n        resultado := -1\n    }\n\n    parar()\n}"
+        olamindo: "pacote principal\n\n// Exemplo VAMOS-T: olá mindo! (Solicitação literal)\nfuncao principal() {\n    escrever(\"olá mindo!\\n\")\n    parar()\n}"
       };
+
+      // Load code from manual cards
+      document.querySelectorAll('.btn-load-code').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const pName = btn.getAttribute('data-preset');
+          if (pName && presets[pName]) {
+            vamosPresets.value = pName;
+            vamosCode.value = presets[pName];
+            switchTab('vamos');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            runVamos(true);
+          }
+        });
+      });
 
       vamosPresets.addEventListener('change', () => {
         const val = vamosPresets.value;

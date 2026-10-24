@@ -344,7 +344,7 @@ O 6502-T integra um compilador e transpiler para a linguagem **VAMOS-LANG** ([fa
 pacote principal
 
 // Exemplo VAMOS-T: Olá Mundo na CPU Ternária 6502-T
-// Emite cada caractere via Memory-Mapped I/O (Porta 120) no Barramento de 6 Trits
+// Emite cada caractere via Memory-Mapped I/O (Porta 300 / 0z210) no Barramento de 6 Trits
 funcao principal() {
     escrever("Olá Mundo!\n")
     parar()
@@ -366,13 +366,29 @@ python3 tools/vamos6502t.py meu_codigo.vamos -o build/meu_codigo.mem
 python3 tools/vamos6502t.py meu_codigo.vamos --json
 ```
 
-#### Laboratório Visual na Interface Web (Porta 27005)
-A aba **🧪 Laboratório & Testes (VAMOS-T)** oferece uma experiência visual interativa de depuração:
-* **Player Passo a Passo:** Botões de reprodução animada (`▶`/`⏸`), avanço/recuo passo a passo (`⏮`/`⏭`) e controle de velocidade (50ms, 150ms, 350ms).
-* **Console CRT Virtual TTY:** Tela de fósforo verde com cursor pulsante exibindo a impressão em tempo real de caracteres via MMIO na porta 120 (`$78`).
-* **Medidor LED de 6 Trits:** 6 lâmpadas LED com iluminação física para cada estado do Acumulador (`+1` ciano neon, `0` indigo escuro, `-1` magenta neon).
-* **Destaque no Assembly:** A instrução Assembly correspondente ao Program Counter atual é iluminada sincronizadamente durante a animação.
-* **Barra de Linha do Tempo (Slider):** Arraste para inspecionar qualquer ciclo ou instrução no tempo de execução.
+#### Laboratório Visual & Guia Interativo (Porta 27005)
+A interface web conta com três ambientes dedicados acessíveis pelo menu superior:
+
+1. **🧪 Laboratório VAMOS-T:**
+   * **Player Passo a Passo:** Botões de reprodução animada (`▶`/`⏸`), avanço/recuo passo a passo (`⏮`/`⏭`) e controle de velocidade (50ms, 150ms, 350ms).
+   * **Console CRT Virtual TTY:** Tela de fósforo verde com cursor pulsante exibindo a impressão em tempo real de caracteres via MMIO na porta 300 (`0z210`).
+   * **Medidor LED de 6 Trits:** 6 lâmpadas LED com iluminação física para cada estado do Acumulador (`+1` ciano neon, `0` indigo escuro, `-1` magenta neon).
+   * **Destaque no Assembly:** A instrução Assembly correspondente ao Program Counter atual é iluminada sincronizadamente durante a animação.
+   * **Barra de Linha do Tempo (Slider):** Arraste para inspecionar qualquer ciclo ou instrução no tempo de execução.
+
+2. **📖 Manual & Exemplos:**
+   * **Fundamentos do Trit Balanceado:** Explicação didática sobre polaridade física push-pull ($-5\text{V}, 0\text{V}, +5\text{V}$) e negação simétrica sem complemento de dois.
+   * **Tabela de Conversão Duodecimal:** Relação completa de pesos duodecimais (dígitos `0-9, A, B`) e prefixo `0z`.
+   * **Cheatsheet da Sintaxe VAMOS-LANG:** Referência de declarações, operações, laços `para`, condicionais `se/senao` e registradores `A/X/Y`.
+   * **Cards Interativos de Demonstração:** 5 exemplos prontos com botão **`▶ Carregar no Laboratório`** para teste instantâneo:
+     - 🧮 *Calculadora Duodecimal:* Operações aritméticas em base 12 (`0z...`).
+     - 💠 *O Poder do Trit:* Negação unária simétrica instantânea.
+     - 🔄 *Contador & Somatório de Gauss:* Laço `para` acumulando valores na RAM.
+     - ⚖️ *Decisão & Flags Ternárias:* Ramificação condicional e flags de Status Zero/Sign.
+     - 🌟 *Olá Mundo:* Emissão sequencial de caracteres no terminal CRT.
+
+3. **💻 Terminal & Telemetria:**
+   * Sessão interativa direta com a CPU e o monitor de memória.
 
 ---
 
