@@ -66,6 +66,7 @@ Trit_Base12_BaseLivre/
 │   ├── especificacao_completa.md# Especificação formal da CPU, ISA e RTL
 │   ├── manual_emulador.md       # Manual de operação do emulador ciclo a ciclo
 │   ├── manual_vamos_lang.md     # Manual de referência da linguagem VAMOS-T e laboratório web
+│   ├── resumo_projeto.md        # Especificação técnica e resumo arquitetural executivo
 │   ├── simulacao.md             # Guia de simulação de hardware
 │   ├── tese_antitese.md         # Confronto técnico binário vs. ternário
 │   └── assets/                  # Esquemas e diagramas
@@ -76,13 +77,16 @@ Trit_Base12_BaseLivre/
 │   └── vamos6502t.py            # Compilador VAMOS-LANG para 6502-T (CLI, JSON e trace)
 ├── tests/                       # Testes automatizados de regressão
 │   ├── test_6502t_suite.py      # Suite ponta a ponta obrigatória (7/7 PASS)
-│   ├── test_6502t_extended.py   # Suite estendida e reversibilidade round-trip (6/6 PASS)
+│   ├── test_6502t_extended.py   # Suite estendida e reversibilidade round-trip (8/8 PASS)
 │   ├── test_vamos_compiler.py   # Suite do compilador VAMOS-T (9/9 PASS)
 │   └── test_rtl_logic.py        # Suite de verificação lógica RTL em silício (7/7 PASS)
 ├── scripts/                     # Scripts de automação EDA
 │   └── build_bitstream.tcl      # Síntese em lote para Xilinx Vivado (FPGA Artix-7)
 ├── src_asm/                     # Programas Assembly de demonstração
-│   └── program.s                # Código fonte de exemplo
+│   ├── program.s                # Aritmética duodecimal e desvio BEQ
+│   ├── fibonacci.s              # Cálculo em laço da sequência de Fibonacci
+│   ├── ternary_logic.s          # Demonstração física de inversão NEG e flags
+│   └── tty_stream.s             # Streaming de texto para MMIO TTY ($300)
 ├── web/                         # Frontend Web em Go puro (Tema Tokyo Night)
 │   ├── go.mod                   # Módulo Go
 │   ├── main.go                  # Servidor HTTP na porta 27005 com //go:embed
@@ -149,14 +153,14 @@ make test
 # Ou diretamente:
 python3 tests/test_6502t_suite.py
 
-# Validação completa das 4 suites (29/29 testes: base, VAMOS-T, RTL silício e estendida):
+# Validação completa das 4 suites (31/31 testes: base, VAMOS-T, RTL silício e estendida):
 make test-all
 ```
 * **Critério de Aceite:** O resultado final de `make test` deve ser impreterivelmente:
   ```text
   RESULTADO FINAL: 7/7 testes passaram com sucesso.
   ```
-  E para `make test-all`, todas as 4 suites devem passar sem erros (29/29 testes).
+  E para `make test-all`, todas as 4 suites devem passar sem erros (31/31 testes).
   Se qualquer teste falhar, analise a FSM, o montador ou a ALU e corrija antes de prosseguir.
 
 ### 4.2. Pipeline de Montagem e Desassemblagem

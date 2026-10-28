@@ -174,6 +174,36 @@ def build_extended_test_suite() -> TestRunner6502T:
         expected_sign=1
     ))
 
+    # 7. Demonstração de Fibonacci (src_asm/fibonacci.s)
+    fib_path = os.path.join(os.path.dirname(__file__), "..", "src_asm", "fibonacci.s")
+    if os.path.exists(fib_path):
+        with open(fib_path, "r", encoding="utf-8") as f:
+            fib_code = f.read()
+        suite.add_test(TestCase6502T(
+            name="Execução de Fibonacci em Laço (fibonacci.s)",
+            source_code=fib_code,
+            expected_acc=13,
+            expected_memory={45: 8, 46: 13, 47: 13},
+            expected_zero=False,
+            expected_sign=1,
+            max_cycles=350
+        ))
+
+    # 8. Demonstração de Lógica Ternária (src_asm/ternary_logic.s)
+    ternary_path = os.path.join(os.path.dirname(__file__), "..", "src_asm", "ternary_logic.s")
+    if os.path.exists(ternary_path):
+        with open(ternary_path, "r", encoding="utf-8") as f:
+            ternary_code = f.read()
+        suite.add_test(TestCase6502T(
+            name="Lógica Ternária e Flags Físicas (ternary_logic.s)",
+            source_code=ternary_code,
+            expected_acc=1,
+            expected_memory={35: -50, 36: 0, 37: 1},
+            expected_zero=False,
+            expected_sign=1,
+            max_cycles=100
+        ))
+
     return suite
 
 
