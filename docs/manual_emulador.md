@@ -76,8 +76,9 @@ Ao iniciar em modo interativo, o emulador exibe o prompt `(6502-T) > ` e aguarda
 ```text
 ==============================================================================
  EMULADOR 6502-T (TRIT + BASE 12) - DEPURAÇÃO INTERATIVA CICLO A CICLO
- Comandos: [Enter]=Passo de Ciclo | 'i'=Passo de Instrução | 'c'=Continuar
-           'm'=Ver Memória | 'b <end>'=Breakpoint | 'r'=Reset | 'q'=Sair
+ Comandos: [Enter]=Passo Ciclo | 'i'=Passo Instrução | 'c'=Continuar
+           'd'=Desassemblar    | 'm'=Ver Memória     | 'set'=Alterar Registrador
+           'b <end>'=Breakpoint | 'r'=Reset          | 'h'=Ajuda | 'q'=Sair
 ==============================================================================
 ```
 
@@ -88,10 +89,13 @@ Ao iniciar em modo interativo, o emulador exibe o prompt `(6502-T) > ` e aguarda
 | **Passo de Ciclo** | `[Enter]` ou `s` | Avança exatamente **1 ciclo de clock** na FSM. Permite inspecionar barramentos nas fases de busca e decodificação. |
 | **Passo de Instrução** | `i` | Executa quantos ciclos forem necessários até completar a instrução corrente e retornar a `FETCH_OPCODE`. |
 | **Continuar** | `c` | Executa continuamente até atingir um breakpoint ativo ou o limite de 2000 ciclos. |
+| **Desassemblar** | `d [inicio] [tamanho]` | Desassembla e lista instruções a partir do PC ou de um endereço especificado com indicador `=>`. Ex: `d 0 20`. |
 | **Exibir Memória** | `m [inicio] [tamanho]` | Apresenta o dump formatado das palavras de memória. Ex: `m 30 10` exibe 10 palavras a partir do endereço 30. |
+| **Alterar Registrador** | `set <reg> <val>` | Altera dinamicamente o valor de registradores (`a`, `x`, `y`, `pc`) ou memória (`set mem <end> <val>`). |
 | **Breakpoint** | `b <endereco>` | Alterna um ponto de parada (*toggle*). Ex: `b 17` adiciona/remove breakpoint no endereço 17. |
 | **Listar Breakpoints** | `b` | Lista todos os endereços com breakpoints ativos. |
 | **Resetar CPU** | `r` | Reinicializa registradores, PC e FSM, mantendo o conteúdo gravado na memória RAM. |
+| **Ajuda** | `h` ou `help` | Exibe a lista rápida com todos os comandos disponíveis no console. |
 | **Sair** | `q` | Encerra a execução do emulador. |
 
 ---

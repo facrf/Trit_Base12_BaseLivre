@@ -61,10 +61,10 @@ module fpga_test_top (
     wire        mem_wr_active;
 
     // Instanciação do Wrapper CPU + Decodificador Duodecimal
-    // Note: cpu_clk_enable é sincronizado via porta de clock direto habilitada
     cpu_6502t_debugger u_cpu_debugger (
         .clk           (clk),
         .rst_n         (rst_n),
+        .clk_en        (cpu_clk_enable),
         .ext_addr_bus  (addr_bus),
         .ext_data_in   (data_to_cpu),
         .ext_data_out  (data_from_cpu),
@@ -88,6 +88,16 @@ module fpga_test_top (
     localparam [1:0] T_ZER = 2'b01;
     localparam [1:0] T_POS = 2'b10;
 
+    // Decodificador de endereço ternário (5 trits balanceados -> índice 0..63)
+    wire [5:0] linear_addr;
+    trits_to_addr #(
+        .NUM_TRITS(5),
+        .ADDR_WIDTH(6)
+    ) u_addr_dec (
+        .trits_in(addr_bus[9:0]),
+        .addr_out(linear_addr)
+    );
+
     reg [11:0] ram_block [0:63];
 
     initial begin
@@ -107,10 +117,10 @@ module fpga_test_top (
 
     always @(posedge clk) begin
         if (write_en)
-            ram_block[addr_bus[5:0]] <= data_from_cpu;
+            ram_block[linear_addr] <= data_from_cpu;
     end
 
-    assign data_to_cpu = read_en ? ram_block[addr_bus[5:0]] : {6{T_ZER}};
+    assign data_to_cpu = read_en ? ram_block[linear_addr] : {6{T_ZER}};
 
     // 5. Multiplexação dos Displays (sw[0]: 0 = Acumulador, 1 = Memória Escrita)
     wire       disp_sign = sw[0] ? mem_wr_sign : acc_sign;

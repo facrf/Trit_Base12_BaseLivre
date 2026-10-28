@@ -28,6 +28,7 @@ module tb_system_dozenal_monitor;
     cpu_6502t_debugger dut (
         .clk           (clk),
         .rst_n         (rst_n),
+        .clk_en        (1'b1),
         .ext_addr_bus  (addr_bus),
         .ext_data_in   (mem_data_to_cpu),
         .ext_data_out  (cpu_data_to_mem),
@@ -60,14 +61,24 @@ module tb_system_dozenal_monitor;
         end
     endfunction
 
+    // Decodificador de endereço ternário (5 trits balanceados -> índice 0..63)
+    wire [5:0] linear_addr;
+    trits_to_addr #(
+        .NUM_TRITS(5),
+        .ADDR_WIDTH(6)
+    ) u_addr_dec (
+        .trits_in(addr_bus[9:0]),
+        .addr_out(linear_addr)
+    );
+
     // Memória Ternária Simulatória (RAM/ROM)
     reg [11:0] memory [0:63];
 
     always @(posedge clk) begin
         if (write_en) begin
-            memory[addr_bus[5:0]] <= cpu_data_to_mem;
+            memory[linear_addr] <= cpu_data_to_mem;
             $display("[T=%0t ns] [MEM WRITE] Endereco: %0d | Valor Gravado: %s%c%c%c (Base 12)",
-                     $time, addr_bus[5:0],
+                     $time, linear_addr,
                      mem_wr_sign ? "-" : "+",
                      fmt_dozenal_char(mem_wr_d2),
                      fmt_dozenal_char(mem_wr_d1),
@@ -77,7 +88,7 @@ module tb_system_dozenal_monitor;
 
     always @(*) begin
         if (read_en)
-            mem_data_to_cpu = memory[addr_bus[5:0]];
+            mem_data_to_cpu = memory[linear_addr];
         else
             mem_data_to_cpu = {6{T_ZER}};
     end

@@ -3,6 +3,7 @@
 module cpu_6502t_top (
     input  wire        clk,
     input  wire        rst_n,
+    input  wire        clk_en,        // Habilitação síncrona de clock
 
     // Barramento Externo de Memória / Periféricos
     output wire [19:0] addr_bus,      // 10 trits de endereço (20 bits)
@@ -63,6 +64,7 @@ module cpu_6502t_top (
     instruction_decoder_6502t u_decoder (
         .clk          (clk),
         .rst_n        (rst_n),
+        .clk_en       (clk_en),
 
         // Interface do Barramento Externo
         .mem_data_in  (data_in),

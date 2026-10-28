@@ -32,6 +32,7 @@ module tb_instruction_decoder_6502t;
     instruction_decoder_6502t uut (
         .clk          (clk),
         .rst_n        (rst_n),
+        .clk_en       (1'b1),
         .mem_data_in  (mem_data_in),
         .mem_addr     (mem_addr),
         .mem_data_out (mem_data_out),
@@ -53,12 +54,22 @@ module tb_instruction_decoder_6502t;
 
     always #5 clk = ~clk;
 
+    // Decodificador de endereço ternário (4 trits balanceados -> índice 0..15)
+    wire [3:0] linear_addr;
+    trits_to_addr #(
+        .NUM_TRITS(4),
+        .ADDR_WIDTH(4)
+    ) u_addr_dec (
+        .trits_in(mem_addr[7:0]),
+        .addr_out(linear_addr)
+    );
+
     // Modelo de memória assíncrona simulada de 6 trits
     reg [11:0] rom [0:15];
 
     always @(*) begin
         if (mem_read)
-            mem_data_in = rom[mem_addr[3:0]];
+            mem_data_in = rom[linear_addr];
         else
             mem_data_in = {6{T_ZER}};
     end

@@ -33,7 +33,6 @@ module alu_6trit (
     reg  [11:0] op_b_eff;
     reg  [1:0]  cin_eff;
     wire [11:0] alu_result;
-    wire [6:0]  carry_chain [1:0]; // Vetor de transportes entre estágios
 
     // Função para inversão simétrica de 1 trit (-1 <-> +1, 0 <-> 0)
     function [1:0] invert_trit;

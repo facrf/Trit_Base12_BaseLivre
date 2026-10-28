@@ -26,6 +26,7 @@ module tb_cpu_6502t_system;
     cpu_6502t_top dut (
         .clk          (clk),
         .rst_n        (rst_n),
+        .clk_en       (1'b1),
         .addr_bus     (addr_bus),
         .data_in      (mem_data_to_cpu),
         .data_out     (cpu_data_to_mem),
@@ -42,20 +43,30 @@ module tb_cpu_6502t_system;
     // Clock com período de 10ns (100 MHz)
     always #5 clk = ~clk;
 
+    // Decodificador de endereço ternário (5 trits balanceados -> índice 0..63)
+    wire [5:0] linear_addr;
+    trits_to_addr #(
+        .NUM_TRITS(5),
+        .ADDR_WIDTH(6)
+    ) u_addr_dec (
+        .trits_in(addr_bus[9:0]),
+        .addr_out(linear_addr)
+    );
+
     // Memória Ternária Simulatória (64 palavras de 6 trits)
     reg [11:0] ram [0:63];
 
     // Leitura e Escrita Síncrona na Memória
     always @(posedge clk) begin
         if (write_en) begin
-            ram[addr_bus[5:0]] <= cpu_data_to_mem;
-            $display("[MEMORIA] Escrita no endereco %0d -> Dado: %b", addr_bus[5:0], cpu_data_to_mem);
+            ram[linear_addr] <= cpu_data_to_mem;
+            $display("[MEMORIA] Escrita no endereco %0d -> Dado: %b", linear_addr, cpu_data_to_mem);
         end
     end
 
     always @(*) begin
         if (read_en)
-            mem_data_to_cpu = ram[addr_bus[5:0]];
+            mem_data_to_cpu = ram[linear_addr];
         else
             mem_data_to_cpu = {6{T_ZER}};
     end

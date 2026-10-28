@@ -85,24 +85,28 @@ funcao principal() {
 }
 ```
 
-### 4.2. Declaração e Atribuição de Variáveis
-Variáveis podem ser declaradas com inferência de tipo (`:=`) ou palavra-chave explícita `var`:
+### 4.2. Declaração e Atribuição de Variáveis e Constantes
+Variáveis e constantes podem ser declaradas com inferência de tipo (`:=`) ou palavras-chave explícitas (`var`, `variavel`, `const`, `constante`):
 
 ```go
 a := 10            // Literal decimal
 b := 0z015         // Literal duodecimal (+17 decimal)
 c := -5            // Valor negativo
-var total = 0      // Declaração tradicional
+var total = 0      // Declaração tradicional de variável
+const PI = 3       // Declaração explícita de constante
+constante TAXA := 12 // Constante com atribuição direta
 ```
 
-As variáveis são alocadas sequencialmente na memória RAM (a partir do endereço `$180`), e o compilador gera automaticamente instruções `STA` e `LDA` correspondentes.
+As variáveis e constantes são alocadas sequencialmente na memória RAM (a partir do endereço `$180`), e o compilador gera automaticamente instruções `STA` e `LDA` correspondentes.
 
-### 4.3. Operações Aritméticas
-Suporta adição (`+`) e subtração (`-`):
+### 4.3. Operações Aritméticas e Negação Unária
+Suporta expressões multi-termos associativas à esquerda com adição (`+`), subtração (`-`) e negação unária simétrica (`-`):
 
 ```go
 soma := num1 + num2
 diferenca := total - 0z00A
+inverso := -positivo      // Inversão física direta via instrução NEG
+expressao := taxa + 10 - 5 + inverso // Expressão encadeada multi-termos
 contador := contador + 1
 ```
 

@@ -167,7 +167,10 @@ class Assembler6502T:
         raw_lines = source.splitlines()
 
         for line in raw_lines:
-            clean = re.sub(r"(//|;).*", "", line).strip()
+            clean = line.strip()
+            if clean.startswith("#"):
+                continue
+            clean = re.sub(r"(//|;|(?<=\s)#\s).*", "", clean).strip()
             if not clean:
                 continue
 

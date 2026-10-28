@@ -103,7 +103,7 @@ class Disassembler6502T:
         """Carrega dados a partir de blocos Verilog ou linhas .mem."""
         current_mem_addr = 0
         for line in text.splitlines():
-            line = re.sub(r"//.*", "", line).strip()
+            line = re.sub(r"(//|;|#).*", "", line).strip()
             if not line:
                 continue
 

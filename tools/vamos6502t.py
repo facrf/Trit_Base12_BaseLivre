@@ -10,7 +10,7 @@ import os
 import re
 import json
 import argparse
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 
 # Garante acesso às ferramentas do repositório
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -306,11 +306,14 @@ class VamosCompiler6502T:
             self.asm.append(f"    STA {target_addr} // {var_name}")
             return
 
-        # 9. Palavra 'var' explícita: var x = 10
-        if tok.type == "IDENT" and tok.value in ("var", "variavel"):
+        # 9. Palavra 'var' / 'const' explícita: var x = 10, const PI = 3, constante MAX := 100
+        if tok.type == "IDENT" and tok.value.lower() in ("var", "variavel", "const", "constante"):
             self._consume()
             var_name = self._consume("IDENT").value
-            self._consume("OP", "=")
+            if self._cur().type == "OP" and self._cur().value in ("=", ":="):
+                self._consume()
+            else:
+                self._consume("OP", "=")
             target_addr = self._get_var_addr(var_name)
             self._parse_expression()
             self.asm.append(f"    STA {target_addr} // {var_name}")
@@ -318,33 +321,36 @@ class VamosCompiler6502T:
 
         raise SyntaxError(f"Linha {tok.line}: Comando não reconhecido próximo a '{tok.value}'")
 
-    def _parse_expression(self):
-        left_tok = self._cur()
+    def _emit_operand(self, inst: str):
+        tok = self._cur()
         self.pos += 1
+        if tok.type == "IDENT" and tok.value.lower() in ("mem", "memoria") and self._cur().type == "LBRACKET":
+            self._consume("LBRACKET")
+            addr_tok = self._cur()
+            self.pos += 1
+            self._consume("RBRACKET")
+            self.asm.append(f"    {inst} {addr_tok.value} // mem[{addr_tok.value}]")
+        elif tok.type == "IDENT":
+            addr = self._get_var_addr(tok.value)
+            self.asm.append(f"    {inst} {addr} // {tok.value}")
+        else:
+            self.asm.append(f"    {inst} #{tok.value}")
 
-        if self._cur().type == "OP" and self._cur().value in ("+", "-"):
-            op_tok = self._consume()
-            right_tok = self._cur()
+    def _parse_expression(self):
+        # Suporte a negação unária inicial (-expr)
+        is_unary_neg = False
+        if self._cur().type == "OP" and self._cur().value == "-":
+            is_unary_neg = True
             self.pos += 1
 
-            if left_tok.type == "IDENT":
-                addr = self._get_var_addr(left_tok.value)
-                self.asm.append(f"    LDA {addr} // {left_tok.value}")
-            else:
-                self.asm.append(f"    LDA #{left_tok.value}")
+        self._emit_operand("LDA")
+        if is_unary_neg:
+            self.asm.append("    NEG")
 
+        while self._cur().type == "OP" and self._cur().value in ("+", "-"):
+            op_tok = self._consume()
             inst = "ADD" if op_tok.value == "+" else "SUB"
-            if right_tok.type == "IDENT":
-                addr = self._get_var_addr(right_tok.value)
-                self.asm.append(f"    {inst} {addr} // {right_tok.value}")
-            else:
-                self.asm.append(f"    {inst} #{right_tok.value}")
-        else:
-            if left_tok.type == "IDENT":
-                addr = self._get_var_addr(left_tok.value)
-                self.asm.append(f"    LDA {addr} // {left_tok.value}")
-            else:
-                self.asm.append(f"    LDA #{left_tok.value}")
+            self._emit_operand(inst)
 
     def _parse_if(self):
         lbl_else = self._get_label("L_ELSE")
@@ -395,39 +401,69 @@ class VamosCompiler6502T:
         self.asm.append(f"\n{lbl_end}:")
 
     def _compile_condition_tokens(self, tokens: List[Token], jump_if_false: str):
-        if len(tokens) == 3:
-            left, op, right = tokens[0], tokens[1], tokens[2]
+        def parse_one_operand(tok_list: List[Token]):
+            if len(tok_list) >= 4 and tok_list[0].value.lower() in ("mem", "memoria") and tok_list[1].type == "LBRACKET":
+                addr = tok_list[2].value
+                del tok_list[0:4]
+                return ("MEM", addr)
+            t = tok_list.pop(0)
+            if t.type == "IDENT":
+                return ("VAR", t.value)
+            return ("IMM", t.value)
 
-            if left.type == "IDENT":
-                addr = self._get_var_addr(left.value)
-                self.asm.append(f"    LDA {addr} // {left.value}")
-            else:
-                self.asm.append(f"    LDA #{left.value}")
+        toks = list(tokens)
+        left = parse_one_operand(toks)
 
-            if right.type == "IDENT":
-                addr = self._get_var_addr(right.value)
-                self.asm.append(f"    SUB {addr} // {right.value}")
+        if not toks:
+            # Condição unária (ex: se flag { ... })
+            if left[0] == "MEM":
+                self.asm.append(f"    LDA {left[1]} // mem[{left[1]}]")
+            elif left[0] == "VAR":
+                addr = self._get_var_addr(left[1])
+                self.asm.append(f"    LDA {addr} // {left[1]}")
             else:
-                self.asm.append(f"    SUB #{right.value}")
-
-            if op.value == "==":
-                self.asm.append(f"    BNE {jump_if_false}")
-            elif op.value == "!=":
-                self.asm.append(f"    BEQ {jump_if_false}")
-            elif op.value == "<":
-                self.asm.append(f"    BEQ {jump_if_false}")
-                self.asm.append(f"    BPL {jump_if_false}")
-            elif op.value == ">":
-                self.asm.append(f"    BEQ {jump_if_false}")
-                self.asm.append(f"    BMI {jump_if_false}")
-        elif len(tokens) == 1:
-            tok = tokens[0]
-            if tok.type == "IDENT":
-                addr = self._get_var_addr(tok.value)
-                self.asm.append(f"    LDA {addr} // {tok.value}")
-            else:
-                self.asm.append(f"    LDA #{tok.value}")
+                self.asm.append(f"    LDA #{left[1]}")
             self.asm.append(f"    BEQ {jump_if_false}")
+            return
+
+        op = toks.pop(0)
+        right = parse_one_operand(toks)
+
+        # Emite carregamento do lado esquerdo
+        if left[0] == "MEM":
+            self.asm.append(f"    LDA {left[1]} // mem[{left[1]}]")
+        elif left[0] == "VAR":
+            addr = self._get_var_addr(left[1])
+            self.asm.append(f"    LDA {addr} // {left[1]}")
+        else:
+            self.asm.append(f"    LDA #{left[1]}")
+
+        # Subtrai o lado direito para produzir flags de comparação
+        if right[0] == "MEM":
+            self.asm.append(f"    SUB {right[1]} // mem[{right[1]}]")
+        elif right[0] == "VAR":
+            addr = self._get_var_addr(right[1])
+            self.asm.append(f"    SUB {addr} // {right[1]}")
+        else:
+            self.asm.append(f"    SUB #{right[1]}")
+
+        # Saltos condicionais baseados no operador
+        if op.value == "==":
+            self.asm.append(f"    BNE {jump_if_false}")
+        elif op.value == "!=":
+            self.asm.append(f"    BEQ {jump_if_false}")
+        elif op.value == "<":
+            self.asm.append(f"    BEQ {jump_if_false}")
+            self.asm.append(f"    BPL {jump_if_false}")
+        elif op.value == ">":
+            self.asm.append(f"    BEQ {jump_if_false}")
+            self.asm.append(f"    BMI {jump_if_false}")
+        elif op.value == "<=":
+            self.asm.append(f"    BPL {jump_if_false}")
+        elif op.value == ">=":
+            self.asm.append(f"    BMI {jump_if_false}")
+        else:
+            raise SyntaxError(f"Operador relacional não suportado: '{op.value}'")
 
 
 def main():

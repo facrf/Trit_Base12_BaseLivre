@@ -41,7 +41,7 @@ Ao atuar neste repositório, o agente deve assumir o papel de **Engenheiro Sêni
 Trit_Base12_BaseLivre/
 ├── constr/                      # Restrições físicas para FPGA Digilent Basys 3
 │   └── basys3_6502t.xdc         # Mapeamento de pinos e clocks para Artix-7
-├── rtl/                         # 10 módulos Verilog sintetizáveis (silício)
+├── rtl/                         # 11 módulos Verilog sintetizáveis (silício)
 │   ├── alu_6trit.v              # Unidade Lógica e Aritmética ternária balanceada
 │   ├── button_debounce.v        # Debouncer de botões para FPGA
 │   ├── cpu_6502t_debugger.v     # Controlador de debug e interface do usuário
@@ -51,6 +51,7 @@ Trit_Base12_BaseLivre/
 │   ├── fpga_test_top.v          # Top-level para sintetização em FPGA Basys 3
 │   ├── instruction_decoder_6502t.v # Decodificador de instruções e FSM síncrona
 │   ├── tfa_1trit.v              # Ternary Full Adder de 1 trit balanceado
+│   ├── trits_to_addr.v          # Decodificador de endereçamento ternário para índice linear
 │   └── trits_to_dozenal.v       # Conversor físico de 6 trits para 2 dígitos duodecimais
 ├── sim/                         # 7 testbenches para simulação Icarus Verilog
 │   ├── tb_alu_6trit.v           # Verificação da ALU e detecção de overflow
@@ -75,14 +76,20 @@ Trit_Base12_BaseLivre/
 │   └── vamos6502t.py            # Compilador VAMOS-LANG para 6502-T (CLI, JSON e trace)
 ├── tests/                       # Testes automatizados de regressão
 │   ├── test_6502t_suite.py      # Suite ponta a ponta obrigatória (7/7 PASS)
-│   └── test_6502t_extended.py   # Suite estendida e reversibilidade round-trip
+│   ├── test_6502t_extended.py   # Suite estendida e reversibilidade round-trip (6/6 PASS)
+│   ├── test_vamos_compiler.py   # Suite do compilador VAMOS-T (9/9 PASS)
+│   └── test_rtl_logic.py        # Suite de verificação lógica RTL em silício (7/7 PASS)
 ├── scripts/                     # Scripts de automação EDA
 │   └── build_bitstream.tcl      # Síntese em lote para Xilinx Vivado (FPGA Artix-7)
 ├── src_asm/                     # Programas Assembly de demonstração
 │   └── program.s                # Código fonte de exemplo
 ├── web/                         # Frontend Web em Go puro (Tema Tokyo Night)
 │   ├── go.mod                   # Módulo Go
-│   └── main.go                  # Servidor HTTP na porta 27005, Terminal e Laboratório VAMOS-T
+│   ├── main.go                  # Servidor HTTP na porta 27005 com //go:embed
+│   └── static/                  # SPA Tokyo Night desacoplada (HTML, CSS e JS)
+│       ├── app.js               # Lógica interativa, gráficos e terminal
+│       ├── index.html           # Layout semântico
+│       └── style.css            # Paleta Tokyo Night e responsividade
 ├── Dockerfile.web               # Multi-stage Docker (golang:alpine -> python:3.12-alpine)
 ├── Makefile                     # Orquestrador padrão de comandos
 ├── AGENTS.md                    # Este guia operacional para LLMs
@@ -141,11 +148,15 @@ Antes de concluir qualquer alteração no código-fonte, o agente **DEVE OBRIGAT
 make test
 # Ou diretamente:
 python3 tests/test_6502t_suite.py
+
+# Validação completa das 4 suites (29/29 testes: base, VAMOS-T, RTL silício e estendida):
+make test-all
 ```
-* **Critério de Aceite:** O resultado final deve ser impreterivelmente:
+* **Critério de Aceite:** O resultado final de `make test` deve ser impreterivelmente:
   ```text
   RESULTADO FINAL: 7/7 testes passaram com sucesso.
   ```
+  E para `make test-all`, todas as 4 suites devem passar sem erros (29/29 testes).
   Se qualquer teste falhar, analise a FSM, o montador ou a ALU e corrija antes de prosseguir.
 
 ### 4.2. Pipeline de Montagem e Desassemblagem

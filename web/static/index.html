@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>6502-T // Emulador Ternário Balanceado (Tokyo Night)</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">3T</div>
+      <div>
+        <span class="brand-title">6502-T</span>
+        <span class="brand-subtitle">Ternary Microprocessor (Base 12)</span>
+      </div>
+    </div>
+    <div class="header-badges">
+      <div class="badge badge-status">
+        <span class="status-dot"></span>
+        <span id="conn-status">CPU ONLINE</span>
+      </div>
+      <div class="badge">
+        <span>Port: <strong class="footer-highlight">27005</strong></span>
+      </div>
+      <div class="badge">
+        <span>Theme: <strong style="color:var(--accent-purple)">Tokyo Night</strong></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="nav-tabs">
+    <button class="nav-tab active" id="tab-vamos">🧪 Laboratório VAMOS-T <span style="font-size: 10px; background: var(--accent-purple); color: var(--bg-darker); padding: 1px 6px; border-radius: 10px; font-weight: 700;">VISUAL</span></button>
+    <button class="nav-tab" id="tab-manual">📖 Manual &amp; Exemplos</button>
+    <button class="nav-tab" id="tab-challenges">🏆 Desafios Interativos <span style="font-size: 10px; background: var(--accent-green); color: var(--bg-darker); padding: 1px 6px; border-radius: 10px; font-weight: 700;">QUIZ</span></button>
+    <button class="nav-tab" id="tab-terminal">💻 Terminal &amp; Telemetria</button>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main>
+    <!-- Tab 1: Terminal & Telemetry View -->
+    <div id="view-terminal" style="display: none;">
+      <!-- Live Telemetry Quick Cards -->
+      <div class="telemetry-grid">
+        <div class="stat-card">
+          <span class="stat-label">Ciclo Clock</span>
+          <span class="stat-value" id="stat-cycle">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Estado FSM</span>
+          <span class="stat-value purple" id="stat-state">FETCH_OPCODE</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Prog. Counter (PC)</span>
+          <span class="stat-value" id="stat-pc">$0000</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Acumulador (A)</span>
+          <span class="stat-value green" id="stat-acc">+0 (0z000)</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Registrador X</span>
+          <span class="stat-value yellow" id="stat-regx">+0 (0z000)</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Registrador Y</span>
+          <span class="stat-value orange" id="stat-regy">+0 (0z000)</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Flags [Z | S | O]</span>
+          <span class="stat-value" id="stat-flags">[0 | 0 | 0]</span>
+        </div>
+      </div>
+
+      <!-- Quick Control Buttons Toolbar -->
+      <div class="toolbar-card" style="margin-top: 14px;">
+        <div class="btn-group">
+          <button class="btn btn-step" id="btn-step" title="Avança 1 ciclo de clock (s)">
+            <span>▶ Step (Ciclo)</span>
+            <span class="btn-kbd">Space</span>
+          </button>
+          <button class="btn btn-inst" id="btn-inst" title="Avança até a próxima instrução (i)">
+            <span>⏩ Instrução</span>
+            <span class="btn-kbd">I</span>
+          </button>
+          <button class="btn btn-run" id="btn-run" title="Executa em velocidade contínua (c)">
+            <span>⚡ Run (Cont)</span>
+            <span class="btn-kbd">C</span>
+          </button>
+          <button class="btn btn-dump" id="btn-dump" title="Exibe o conteúdo da memória RAM (m)">
+            <span>📋 Dump RAM</span>
+            <span class="btn-kbd">M</span>
+          </button>
+          <button class="btn btn-reset" id="btn-reset" title="Reinicia o processo da CPU (POST /api/reset)">
+            <span>🔄 Reset CPU</span>
+            <span class="btn-kbd">R</span>
+          </button>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-secondary" id="btn-clear" title="Limpar histórico do terminal">
+            <span>🧹 Limpar</span>
+          </button>
+          <button class="btn btn-secondary" id="btn-copy" title="Copiar saída do terminal">
+            <span>📄 Copiar</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Interactive Monospace Terminal Window -->
+      <div class="terminal-window" style="margin-top: 14px;">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <div class="terminal-dot dot-red"></div>
+            <div class="terminal-dot dot-yellow"></div>
+            <div class="terminal-dot dot-green"></div>
+          </div>
+          <div class="terminal-title">emu6502t.py (Sessão Interativa - build/program.mem)</div>
+          <div class="terminal-actions">
+            <span class="terminal-link" id="link-autoscroll">Auto-scroll: ON</span>
+          </div>
+        </div>
+
+        <div class="terminal-body" id="term-output">Carregando emulador ternário 6502-T...</div>
+
+        <form class="terminal-footer" id="terminal-form" autocomplete="off">
+          <span class="prompt-label">(6502-T) &gt;</span>
+          <input 
+            type="text" 
+            id="cmd-input" 
+            class="cmd-input" 
+            placeholder="Digite um comando (s, i, c, m [end] [len], b [end], r, q) e pressione Enter..."
+            autofocus
+          />
+          <button type="submit" class="btn btn-step" style="padding: 4px 10px; font-size: 11px;">Enviar</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Tab 2: VAMOS-LANG Playground View -->
+    <div id="view-vamos" style="display: block;">
+      <div class="toolbar-card">
+        <div class="btn-group">
+          <button class="btn btn-step" id="btn-vamos-run" title="Compilar VAMOS-LANG e executar na CPU 6502-T">
+            <span>⚡ Compilar Código</span>
+            <span class="btn-kbd">Ctrl+Enter</span>
+          </button>
+          <select id="vamos-presets" class="vamos-select">
+            <option value="ola">🌟 Exemplo 1: Olá Mundo! (Texto &amp; TTY MMIO)</option>
+            <option value="calc">🧮 Exemplo 2: Calculadora Duodecimal (Base 12)</option>
+            <option value="trit">💠 Exemplo 3: Trit Balanceado &amp; Negação Simétrica</option>
+            <option value="loop">🔄 Exemplo 4: Loop &amp; Acúmulo (Gauss 1..5)</option>
+            <option value="cond">⚖️ Exemplo 5: Flags &amp; Condicionais Ternários</option>
+            <option value="mult">✖️ Exemplo 6: Multiplicação Duodecimal (4 x 3)</option>
+            <option value="olamindo">👾 Exemplo 7: olá mindo! (Solicitação literal)</option>
+          </select>
+          <button class="btn btn-secondary" id="btn-vamos-share" title="Copiar link com código embutido para compartilhar">
+            <span>🔗 Compartilhar</span>
+          </button>
+          <button class="btn btn-secondary" id="btn-vamos-verify-active" style="display:none; border-color: var(--accent-green); color: var(--accent-green);" title="Verificar se o código cumpre os requisitos do desafio ativo">
+            <span>🏆 Validar Desafio</span>
+          </button>
+        </div>
+        <div class="header-badges">
+          <span class="badge" id="vamos-challenge-badge" style="display:none; border-color: var(--accent-green); color: var(--accent-green);">Desafio Ativo</span>
+          <span class="badge" id="vamos-compile-status">Pronto para compilar</span>
+        </div>
+      </div>
+
+      <div class="vamos-container">
+        <!-- Editor Pane -->
+        <div class="vamos-pane">
+          <div class="vamos-pane-header">
+            <span class="vamos-pane-title">📝 Editor VAMOS-LANG (facrf/VAMOSLANG)</span>
+            <span style="font-size: 11px; color: var(--text-muted);">Sintaxe Go em Português</span>
+          </div>
+          <textarea id="vamos-code" class="vamos-textarea" spellcheck="false" placeholder="Digite seu código VAMOS-LANG aqui..."></textarea>
+
+          <!-- Quick Code Snippets Toolbar -->
+          <div style="background: var(--bg-darker); padding: 8px 12px; border-top: 1px solid var(--border-color); display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+            <span style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Inserir:</span>
+            <button type="button" class="btn-snippet" data-snip="escrever(&quot;Olá Mundo!\n&quot;)">escrever("...")</button>
+            <button type="button" class="btn-snippet" data-snip="se x &lt; 0 {&#10;    A = -1&#10;} senao {&#10;    A = 1&#10;}">se ... senao</button>
+            <button type="button" class="btn-snippet" data-snip="para i &lt; 5 {&#10;    total = total + i&#10;    i = i + 1&#10;}">para ...</button>
+            <button type="button" class="btn-snippet" data-snip="x := 0z011 // +13">0z (Base 12)</button>
+            <button type="button" class="btn-snippet" data-snip="parar()">parar()</button>
+            <span style="flex:1;"></span>
+            <button type="button" class="btn-snippet" id="btn-vamos-clear" style="color:var(--accent-red);">Limpar</button>
+          </div>
+        </div>
+
+        <!-- Output & Visual State Pane -->
+        <div class="vamos-pane">
+          <!-- Interactive Execution Player Toolbar -->
+          <div class="player-toolbar">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <button class="btn-player" id="v-btn-play" title="Reproduzir execução passo a passo animada">
+                <span id="v-play-icon">▶</span> <span id="v-play-text">Animar</span>
+              </button>
+              <button class="btn-player" id="v-btn-prev" title="Passo anterior">⏮</button>
+              <button class="btn-player" id="v-btn-next" title="Próximo passo">⏭</button>
+              <button class="btn-player" id="v-btn-start" title="Reiniciar do primeiro passo">🔄 Início</button>
+              <button class="btn-player" id="v-btn-end" title="Ir para o final da execução">⚡ Fim</button>
+            </div>
+            <div class="player-progress">
+              <span id="v-step-label" style="font-size: 11px; color: var(--accent-cyan); white-space: nowrap;">Passo 0 / 0</span>
+              <input type="range" id="v-step-slider" min="0" max="0" value="0" class="player-slider" title="Arraste para navegar no tempo de execução" />
+              <select id="v-speed-select" class="vamos-select" style="font-size:10px;">
+                <option value="150">150ms</option>
+                <option value="50">50ms (Rápido)</option>
+                <option value="350">350ms (Lento)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Virtual TTY CRT Console Screen -->
+          <div class="vamos-pane-header">
+            <span class="vamos-pane-title" style="color:var(--accent-green);">🟢 Saída TTY MMIO (Console Port 300 / 0z210)</span>
+            <span id="v-tty-badge" class="badge" style="font-size: 10px; color: var(--accent-green);">0 chars</span>
+          </div>
+          <div style="padding: 10px 14px; background: var(--bg-darker);">
+            <div class="tty-screen" id="v-tty-console">
+              <span id="v-tty-text">&gt; Clique em "Compilar Código" para iniciar...</span><span class="tty-cursor"></span>
+            </div>
+          </div>
+
+          <!-- 6-Trit LED Visualizer Bus -->
+          <div class="vamos-pane-header">
+            <span class="vamos-pane-title">💠 Barramento de Dados (6 Trits Balanceados do Acumulador)</span>
+            <span id="v-trit-value" class="badge" style="font-size: 10px;">+0 (0z000)</span>
+          </div>
+          <div style="padding: 8px 14px; background: var(--bg-darker);">
+            <div class="trit-meter">
+              <div class="trit-led zer" id="trit-5"><span class="trit-val">0</span><span class="trit-label">T5 (243)</span></div>
+              <div class="trit-led zer" id="trit-4"><span class="trit-val">0</span><span class="trit-label">T4 (81)</span></div>
+              <div class="trit-led zer" id="trit-3"><span class="trit-val">0</span><span class="trit-label">T3 (27)</span></div>
+              <div class="trit-led zer" id="trit-2"><span class="trit-val">0</span><span class="trit-label">T2 (9)</span></div>
+              <div class="trit-led zer" id="trit-1"><span class="trit-val">0</span><span class="trit-label">T1 (3)</span></div>
+              <div class="trit-led zer" id="trit-0"><span class="trit-val">0</span><span class="trit-label">T0 (1)</span></div>
+            </div>
+          </div>
+
+          <!-- Registers & Flags Grid -->
+          <div style="padding: 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: var(--bg-darker); border-top: 1px solid var(--border-color);">
+            <div class="stat-card">
+              <span class="stat-label">Ciclo Atual</span>
+              <span class="stat-value" id="v-stat-cycles">0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Prog. Counter (PC)</span>
+              <span class="stat-value" id="v-stat-pc">$0000</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Acumulador (A)</span>
+              <span class="stat-value green" id="v-stat-acc">+0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Registrador X</span>
+              <span class="stat-value yellow" id="v-stat-regx">+0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Registrador Y</span>
+              <span class="stat-value orange" id="v-stat-regy">+0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Flags [Z|S|O]</span>
+              <span class="stat-value" id="v-stat-flags">[0 | 0 | 0]</span>
+            </div>
+          </div>
+
+          <!-- Assembly 6502-T Inspector with Highlighting -->
+          <div class="vamos-pane-header" style="border-top: 1px solid var(--border-color);">
+            <span class="vamos-pane-title">⚙️ Assembly 6502-T Gerado &amp; Rastreamento</span>
+            <span id="vamos-asm-badge" class="badge" style="font-size: 10px;">0 palavras</span>
+          </div>
+          <div id="vamos-asm-output" class="vamos-output-pre">; O código assembly compilado aparecerá aqui...</div>
+
+          <!-- Variables in RAM Table -->
+          <div class="vamos-pane-header" style="border-top: 1px solid var(--border-color);">
+            <span class="vamos-pane-title">📦 Variáveis Alocadas na RAM</span>
+          </div>
+          <div style="max-height: 140px; overflow-y: auto;">
+            <table class="vamos-vars-table">
+              <thead>
+                <tr>
+                  <th>Variável</th>
+                  <th>Endereço RAM</th>
+                  <th>Decimal</th>
+                  <th>Duodecimal</th>
+                  <th>Trits (6T)</th>
+                </tr>
+              </thead>
+              <tbody id="vamos-vars-tbody">
+                <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 10px;">Nenhuma variável declarada</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Manual & Exemplos Didáticos (VAMOS-LANG) -->
+    <div id="view-manual" style="display: none;">
+      <!-- Hero Banner -->
+      <div class="manual-hero">
+        <div class="manual-hero-title">
+          <span>📚</span> Manual Rápido VAMOS-LANG // CPU 6502-T
+        </div>
+        <div class="manual-hero-desc">
+          Guia introdutório para cursos e laboratórios: aprenda como funcionam a <strong>Lógica Ternária Balanceada {-1, 0, +1}</strong> e o <strong>Sistema Duodecimal (Base 12)</strong> no clássico microprocessador MOS 6502 reinventado.
+        </div>
+      </div>
+
+      <!-- Fundamentos Teóricos (3 Cards) -->
+      <div class="manual-grid">
+        <!-- Card 1: O que é o Trit -->
+        <div class="manual-card">
+          <div class="manual-card-title">
+            <span>💠 O que é o Trit Balanceado?</span>
+            <span style="font-size: 11px; color: var(--accent-cyan);">{-1, 0, +1}</span>
+          </div>
+          <p>
+            Diferente do <em>bit</em> binário ({0, 1}), o <strong>Trit</strong> possui 3 estados físicos comutados por transistores NPN/PNP em push-pull:
+          </p>
+          <ul style="padding-left: 18px; display: flex; flex-direction: column; gap: 4px;">
+            <li><strong>+1 (POS):</strong> +5V (Transistor NPN saturado)</li>
+            <li><strong> 0 (ZER):</strong>  0V (Ambos transistores em corte)</li>
+            <li><strong>-1 (NEG):</strong> -5V (Transistor PNP saturado)</li>
+          </ul>
+          <p>
+            No barramento de dados de <strong>6 trits</strong>, cada posição possui peso exponencial de potências de 3:
+          </p>
+          <table class="manual-table">
+            <thead>
+              <tr><th>Trit</th><th>T5</th><th>T4</th><th>T3</th><th>T2</th><th>T1</th><th>T0</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Peso</td><td>243</td><td>81</td><td>27</td><td>9</td><td>3</td><td>1</td></tr>
+            </tbody>
+          </table>
+          <p style="font-size: 11px; color: var(--accent-green); margin-top: 4px;">
+            ★ <strong>Vantagem Revolucionária:</strong> A negação simétrica é direta: para inverter o sinal de um número, basta inverter cada trit (+ vira -, - vira +). Não há necessidade de bit de sinal nem complemento de dois assimétrico!
+          </p>
+        </div>
+
+        <!-- Card 2: Aritmética Duodecimal (Base 12) -->
+        <div class="manual-card">
+          <div class="manual-card-title">
+            <span>🔢 A Mágica da Base 12 (0z...)</span>
+            <span style="font-size: 11px; color: var(--accent-purple);">Radix 12</span>
+          </div>
+          <p>
+            Para facilitar a leitura humana da telemetria e das instruções, o 6502-T utiliza numeração <strong>Duodecimal (Base 12)</strong> com prefixo <code>0z</code>.
+          </p>
+          <p>
+            O número 12 possui quatro divisores limpos {2, 3, 4, 6}, gerando frações muito mais naturais que a base 10. Seus algarismos são:
+            <code>0, 1, 2, 3, 4, 5, 6, 7, 8, 9, A (=10), B (=11)</code>.
+          </p>
+          <table class="manual-table">
+            <thead>
+              <tr><th>Duodecimal</th><th>Cálculo</th><th>Decimal</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>0z00A</code></td><td>10</td><td>+10</td></tr>
+              <tr><td><code>0z00B</code></td><td>11</td><td>+11</td></tr>
+              <tr><td><code>0z010</code></td><td>1×12 + 0</td><td>+12</td></tr>
+              <tr><td><code>0z011</code></td><td>1×12 + 1</td><td>+13</td></tr>
+              <tr><td><code>0z042</code></td><td>4×12 + 2</td><td>+50</td></tr>
+              <tr><td><code>0z0BB</code></td><td>11×12 + 11</td><td>+143</td></tr>
+              <tr><td><code>0z110</code></td><td>1×144 + 1×12 + 0</td><td>+156</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Card 3: Sintaxe VAMOS-LANG -->
+        <div class="manual-card">
+          <div class="manual-card-title">
+            <span>⚡ Sintaxe Essencial de VAMOS</span>
+            <span style="font-size: 11px; color: var(--accent-yellow);">Go em Português</span>
+          </div>
+          <p>
+            VAMOS-LANG é uma linguagem simplificada estilo Go com palavras-chave em Português, transpilada diretamente para Assembly 6502-T:
+          </p>
+          <ul style="padding-left: 18px; display: flex; flex-direction: column; gap: 4px;">
+            <li><code>pacote principal</code> / <code>funcao principal() { ... }</code></li>
+            <li><code>a := 0z010</code> ou <code>var x = 5</code> (alocadas na RAM)</li>
+            <li><code>soma := a + b</code> e <code>sub := a - b</code></li>
+            <li><code>se cond { ... } senao { ... }</code> (desvios condicionais)</li>
+            <li><code>para cond { ... }</code> (laços de repetição)</li>
+            <li><code>A = resultado</code> e <code>X = A</code> (registradores)</li>
+            <li><code>escrever("Olá!\n")</code> (MMIO porta 300 / 0z210)</li>
+            <li><code>parar()</code> (termina o programa)</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Galeria de Exemplos Práticos Interativos -->
+      <div style="margin-top: 20px;">
+        <h3 style="font-size: 16px; color: var(--accent-cyan); display: flex; align-items: center; gap: 8px;">
+          <span>🧪</span> Exemplos Didáticos Prontos para Testar
+        </h3>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+          Clique em "▶ Carregar no Laboratório" para enviar o código diretamente ao editor, compilar e assistir à execução ciclo a ciclo.
+        </p>
+
+        <div class="manual-grid" style="margin-top: 12px;">
+          <!-- Exemplo 1: Calculadora Duodecimal -->
+          <div class="manual-card">
+            <div class="manual-card-title">
+              <span>🧮 1. Calculadora Duodecimal (Base 12)</span>
+              <button class="btn btn-step btn-load-code" data-preset="calc">▶ Carregar no Laboratório</button>
+            </div>
+            <p>Realiza operações aritméticas diretamente usando numeração duodecimal <code>0z</code> e reflete o resultado no Acumulador e na tela CRT.</p>
+            <div class="manual-code-block">num1 := 0z010       // +12 decimal
+num2 := 0z005       // +5 decimal
+soma := num1 + num2 // +17 decimal (0z015)
+resultado := soma - 0z008 // +9 decimal</div>
+          </div>
+
+          <!-- Exemplo 2: Trit Balanceado e Inversão de Sinal -->
+          <div class="manual-card">
+            <div class="manual-card-title">
+              <span>💠 2. O Poder do Trit (Inversão Simétrica)</span>
+              <button class="btn btn-step btn-load-code" data-preset="trit">▶ Carregar no Laboratório</button>
+            </div>
+            <p>Inverte o sinal de um número positivo para negativo sem complicação matemática. Observe a iluminação dos LEDs rosa/vermelho (-1) no barramento!</p>
+            <div class="manual-code-block">valor := 0z042       // +50 decimal
+invertido := 0 - valor // -50 decimal (Simetria pura!)
+A = invertido</div>
+          </div>
+
+          <!-- Exemplo 3: Contador e Loop de Gauss -->
+          <div class="manual-card">
+            <div class="manual-card-title">
+              <span>🔄 3. Contador &amp; Somatório de Gauss (1..5)</span>
+              <button class="btn btn-step btn-load-code" data-preset="loop">▶ Carregar no Laboratório</button>
+            </div>
+            <p>Utiliza a instrução de repetição <code>para i &lt; limite</code> para iterar 5 vezes, somando valores progressivamente na RAM.</p>
+            <div class="manual-code-block">para i &lt; limite {
+    total = total + i
+    i = i + 1
+}</div>
+          </div>
+
+          <!-- Exemplo 4: Tomada de Decisão com se / senao -->
+          <div class="manual-card">
+            <div class="manual-card-title">
+              <span>⚖️ 4. Decisão &amp; Flags Ternárias (se / senao)</span>
+              <button class="btn btn-step btn-load-code" data-preset="cond">▶ Carregar no Laboratório</button>
+            </div>
+            <p>Testa o sinal do número com desvio condicional ternário, ativando as flags de Status Zero (Z) e Sign (S).</p>
+            <div class="manual-code-block">se alvo &lt; 0 {
+    status = -1
+} senao {
+    status = 1
+}</div>
+          </div>
+
+          <!-- Exemplo 5: Olá Mundo no Console CRT TTY -->
+          <div class="manual-card">
+            <div class="manual-card-title">
+              <span>🌟 5. Olá Mundo! (Console CRT MMIO)</span>
+              <button class="btn btn-step btn-load-code" data-preset="ola">▶ Carregar no Laboratório</button>
+            </div>
+            <p>Escreve uma cadeia de caracteres na porta de terminal mapeada em memória (MMIO porta 300 / 0z210), simulando um terminal CRT com fósforo verde.</p>
+            <div class="manual-code-block">escrever("Olá Mundo!\n")
+parar()</div>
+          </div>
+
+          <!-- Exemplo 6: Multiplicação Duodecimal -->
+          <div class="manual-card">
+            <div class="manual-card-title">
+              <span>✖️ 6. Multiplicação por Acúmulo (4 x 3)</span>
+              <button class="btn btn-step btn-load-code" data-preset="mult">▶ Carregar no Laboratório</button>
+            </div>
+            <p>Demonstra multiplicação aritmética por somas progressivas em base 12: 4 vezes 3 resulta em 12 (representado como <code>0z010</code>).</p>
+            <div class="manual-code-block">a := 4
+b := 3
+produto := 0
+para b > 0 {
+    produto = produto + a
+    b = b - 1
+}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Challenges View -->
+    <div id="view-challenges" style="display: none; padding-top: 10px;">
+      <div class="manual-hero">
+        <h2 style="font-size: 20px; color: var(--accent-cyan); display: flex; align-items: center; gap: 10px;">
+          <span>🏆</span> Laboratório de Desafios Interativos (Trit Challenges)
+        </h2>
+        <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px; line-height: 1.5;">
+          Resolva os desafios práticos de arquitetura e lógica ternária abaixo. Escreva o código em VAMOS-T, teste e submeta para validação automática com feedback instantâneo!
+        </p>
+      </div>
+
+      <div class="manual-grid" style="margin-top: 16px;">
+        <!-- Desafio 1 -->
+        <div class="manual-card" id="card-ch-1">
+          <div class="manual-card-title">
+            <span>💠 Desafio 1: Inversor Simétrico Sem Multiplicação</span>
+            <span class="badge" id="badge-ch-1" style="font-size: 11px;">Pendente</span>
+          </div>
+          <p>
+            Na lógica ternária balanceada {-1, 0, +1}, negar um número não exige multiplicação por -1 nem complemento de dois. 
+            Crie a variável <code>entrada := 0z042</code> (+50), obtenha seu inverso simétrico em <code>saida</code> (usando <code>0 - entrada</code>) e carregue em <code>A</code>.
+          </p>
+          <div class="manual-code-block">// Critério de Sucesso:
+// saida == -50 (-0z042) e A == -50</div>
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <button class="btn btn-step btn-start-challenge" data-ch="1">🚀 Carregar Desafio</button>
+            <button class="btn btn-secondary btn-verify-challenge" data-ch="1">🧪 Validar Solução</button>
+          </div>
+        </div>
+
+        <!-- Desafio 2 -->
+        <div class="manual-card" id="card-ch-2">
+          <div class="manual-card-title">
+            <span>🧮 Desafio 2: Aritmética Duodecimal (Base 12)</span>
+            <span class="badge" id="badge-ch-2" style="font-size: 11px;">Pendente</span>
+          </div>
+          <p>
+            Utilize numeração duodecimal para somar <code>num1 := 0z008</code> (8 decimal) com <code>num2 := 0z005</code> (5 decimal).
+            Armazene a soma na variável <code>total</code> e no Acumulador <code>A</code>. Em base 12, 8 + 5 = 13 (0z011).
+          </p>
+          <div class="manual-code-block">// Critério de Sucesso:
+// total == 13 (+0z011) e A == 13</div>
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <button class="btn btn-step btn-start-challenge" data-ch="2">🚀 Carregar Desafio</button>
+            <button class="btn btn-secondary btn-verify-challenge" data-ch="2">🧪 Validar Solução</button>
+          </div>
+        </div>
+
+        <!-- Desafio 3 -->
+        <div class="manual-card" id="card-ch-3">
+          <div class="manual-card-title">
+            <span>🔄 Desafio 3: Contador Regressivo com Loop</span>
+            <span class="badge" id="badge-ch-3" style="font-size: 11px;">Pendente</span>
+          </div>
+          <p>
+            Implemente um contador regressivo utilizando o laço <code>para</code>. Comece com <code>contador := 3</code> e decremente até alcançar zero (<code>contador != 0</code>). Ao final, atribua <code>A = contador</code>.
+          </p>
+          <div class="manual-code-block">// Critério de Sucesso:
+// contador == 0 (0z000), A == 0 e Flag Zero (Z) == 1</div>
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <button class="btn btn-step btn-start-challenge" data-ch="3">🚀 Carregar Desafio</button>
+            <button class="btn btn-secondary btn-verify-challenge" data-ch="3">🧪 Validar Solução</button>
+          </div>
+        </div>
+
+        <!-- Desafio 4 -->
+        <div class="manual-card" id="card-ch-4">
+          <div class="manual-card-title">
+            <span>⚖️ Desafio 4: Classificador Ternário de Três Estados</span>
+            <span class="badge" id="badge-ch-4" style="font-size: 11px;">Pendente</span>
+          </div>
+          <p>
+            Dado o valor <code>alvo := -25</code>, utilize uma estrutura de decisão <code>se / senao</code> para atribuir à variável <code>classe</code> e ao Acumulador <code>A</code> o valor <code>-1</code> se o número for negativo, ou <code>1</code> caso contrário.
+          </p>
+          <div class="manual-code-block">// Critério de Sucesso:
+// classe == -1, A == -1 e Flag Sign (S) == -1</div>
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <button class="btn btn-step btn-start-challenge" data-ch="4">🚀 Carregar Desafio</button>
+            <button class="btn btn-secondary btn-verify-challenge" data-ch="4">🧪 Validar Solução</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Technical Footer -->
+  <footer>
+    <div class="footer-left">
+      <span>Barramento Dados: <strong class="footer-highlight">6 trits</strong> [-364, +364]</span>
+      <span>Barramento Endereço: <strong class="footer-highlight">10 trits</strong> (59.049 palavras)</span>
+      <span>Aritmética: <strong style="color:var(--accent-purple)">Duodecimal (Base 12)</strong></span>
+    </div>
+    <div>
+      <span>MOS 6502 Ternário Balanceado &copy; Fabiano Augusto Cesar da Rocha Filho</span>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+  <!-- Toast Notifications Container -->
+  <div id="toast-container" style="position: fixed; bottom: 30px; right: 30px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;"></div>
+</body>
+</html>

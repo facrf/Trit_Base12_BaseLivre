@@ -10,6 +10,9 @@ import os
 import re
 from typing import List, Tuple, Dict, Optional
 
+# Garante acesso às ferramentas irmãs no diretório tools/
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 # =====================================================================
 # MATEMÁTICA E CONVERSÕES TERNÁRIAS BALANCEADAS / BASE 12
 # =====================================================================
@@ -359,11 +362,57 @@ class DebuggerCLI:
             print(f"  [{i:02d}] : {val:+4d} | {doz_str} | Trits: [{tr_str}]{marker}")
         print()
 
+    def disassemble_memory(self, start: Optional[int] = None, length: int = 16):
+        if start is None:
+            start = self.cpu.pc
+        end = min(start + length, self.cpu.mem_size)
+        print(f"\n--- DESASSEMBLAGEM (${start:02d} a ${end-1:02d}) ---")
+
+        # Constrói código compatível com o desassemblador
+        lines = []
+        for addr in range(start, end):
+            val = self.cpu.memory[addr]
+            bin_str = trits_to_bin12(int_to_trits(val, 6))
+            lines.append(f"ram_block[{addr}] = 12'b{bin_str};")
+
+        try:
+            from disasm6502t import Disassembler6502T
+            dis = Disassembler6502T()
+            dis.load_verilog_code("\n".join(lines))
+            dis.pass1_analyze_and_create_labels()
+
+            pc = start
+            while pc < end:
+                ptr = " => " if pc == self.cpu.pc else "    "
+                if pc in dis.instruction_map:
+                    mnem, op_type, op_val = dis.instruction_map[pc]
+                    if op_type == "IMM":
+                        doz = int_to_dozenal(op_val).strip()
+                        print(f"{ptr}[{pc:02d}] {mnem:<4} #{op_val:<5} ; B12: {doz}")
+                        pc += 2
+                    elif op_type == "ABS":
+                        doz = int_to_dozenal(op_val).strip()
+                        lbl = dis.labels.get(op_val, f"${op_val}")
+                        print(f"{ptr}[{pc:02d}] {mnem:<4} {lbl:<5} ; Alvo: ${op_val:02d} ({doz})")
+                        pc += 2
+                    else:
+                        print(f"{ptr}[{pc:02d}] {mnem:<10}")
+                        pc += 1
+                else:
+                    val = self.cpu.memory[pc]
+                    doz = int_to_dozenal(val).strip()
+                    print(f"{ptr}[{pc:02d}] .WORD {val:<5} ; {doz}")
+                    pc += 1
+        except Exception as e:
+            print(f"[X] Erro ao desassemblar memória: {e}")
+        print()
+
     def run(self):
         print("=" * 78)
         print(" EMULADOR 6502-T (TRIT + BASE 12) - DEPURAÇÃO INTERATIVA CICLO A CICLO")
-        print(" Comandos: [Enter]=Passo de Ciclo | 'i'=Passo de Instrução | 'c'=Continuar")
-        print("           'm'=Ver Memória | 'b <end>'=Breakpoint | 'r'=Reset | 'q'=Sair")
+        print(" Comandos: [Enter]=Passo Ciclo | 'i'=Passo Instrução | 'c'=Continuar")
+        print("           'd'=Desassemblar    | 'm'=Ver Memória     | 'set'=Alterar Registrador")
+        print("           'b <end>'=Breakpoint | 'r'=Reset          | 'h'=Ajuda | 'q'=Sair")
         print("=" * 78)
         self.print_status()
 
@@ -390,6 +439,50 @@ class DebuggerCLI:
                         print(f"\n[!] Breakpoint atingido no endereço {self.cpu.pc}!")
                         break
                 self.print_status()
+
+            elif cmd.startswith("d"):
+                parts = cmd.split()
+                start = int(parts[1]) if len(parts) > 1 else None
+                length = int(parts[2]) if len(parts) > 2 else 16
+                self.disassemble_memory(start, length)
+
+            elif cmd.startswith("set"):
+                parts = cmd.split()
+                if len(parts) >= 3:
+                    target = parts[1].lower()
+                    val = int(parts[2])
+                    if target == "a":
+                        self.cpu.acc = val
+                        print(f"[*] Acumulador A alterado para {val} ({int_to_dozenal(val).strip()})")
+                    elif target == "x":
+                        self.cpu.reg_x = val
+                        print(f"[*] Registrador X alterado para {val}")
+                    elif target == "y":
+                        self.cpu.reg_y = val
+                        print(f"[*] Registrador Y alterado para {val}")
+                    elif target == "pc":
+                        self.cpu.pc = val
+                        print(f"[*] Program Counter alterado para ${val:04d}")
+                    elif target in ("m", "mem") and len(parts) >= 4:
+                        m_addr = int(parts[2])
+                        m_val = int(parts[3])
+                        if m_addr < self.cpu.mem_size:
+                            self.cpu.memory[m_addr] = m_val
+                            print(f"[*] Memória [${m_addr:02d}] alterada para {m_val}")
+                self.print_status()
+
+            elif cmd in ("h", "help", "?"):
+                print("\n--- COMANDOS DO EMULADOR 6502-T ---")
+                print("  [Enter] / s       : Avança 1 ciclo de clock na FSM")
+                print("  i                 : Avança 1 instrução inteira (step instruction)")
+                print("  c                 : Continua a execução livre até breakpoint")
+                print("  d [end] [tam]     : Desassembla instruções na memória (padrão: PC)")
+                print("  m [end] [tam]     : Exibe dump de memória em Trits, Dec e Base 12")
+                print("  b <end>           : Alterna breakpoint no endereço especificado")
+                print("  set <reg> <val>   : Altera registrador (a, x, y, pc) ou memória (set mem <end> <val>)")
+                print("  r                 : Reinicia (Reset) a CPU")
+                print("  h / help          : Exibe esta lista de ajuda")
+                print("  q                 : Encerra o emulador\n")
 
             elif cmd.startswith("m"):
                 parts = cmd.split()
@@ -418,7 +511,7 @@ class DebuggerCLI:
             elif cmd == "q":
                 break
             else:
-                print("Comando não reconhecido. Use: [s, i, c, m, b, r, q]")
+                print("Comando não reconhecido. Digite 'h' para ver os comandos disponíveis.")
 
     def run_interactive(self):
         """Alias para o método run()."""

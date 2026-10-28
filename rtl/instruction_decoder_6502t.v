@@ -3,6 +3,7 @@
 module instruction_decoder_6502t (
     input  wire        clk,
     input  wire        rst_n,
+    input  wire        clk_en,
 
     // Interface com o Barramento de Memória
     input  wire [11:0] mem_data_in,    // Dado lido da memória (6 trits)
@@ -40,8 +41,8 @@ module instruction_decoder_6502t (
     localparam [2:0] S_DECODE       = 3'b001;
     localparam [2:0] S_FETCH_OPERAND= 3'b010;
     localparam [2:0] S_FETCH_ADDR_H = 3'b011;
+    localparam [2:0] S_READ_MEM     = 3'b101;
     localparam [2:0] S_EXECUTE      = 3'b100;
-    localparam [2:0] S_WRITEBACK    = 3'b101;
 
     reg [2:0]  state;
     reg [19:0] pc;                     // Program Counter (10 trits balanceados)
@@ -90,7 +91,7 @@ module instruction_decoder_6502t (
             alu_operand_b <= {6{T_ZER}};
             mem_addr      <= {10{T_ZER}};
             mem_data_out  <= {6{T_ZER}};
-        end else begin
+        end else if (clk_en) begin
             // Pulso padrão de strobes
             alu_load_acc <= 1'b0;
             reg_x_load   <= 1'b0;
@@ -140,9 +141,23 @@ module instruction_decoder_6502t (
                 S_FETCH_ADDR_H: begin
                     target_addr[11:0] <= mem_data_in;
                     target_addr[19:12]<= {4{T_ZER}};
-                    mem_read          <= 1'b0;
                     pc                <= inc_pc_ternary(pc);
-                    state             <= S_EXECUTE;
+                    if (field_group == {T_POS, T_POS}) begin
+                        // Se for operação de ALU (LDA, ADD, SUB), busca dado na memória
+                        mem_addr <= { {4{T_ZER}}, mem_data_in };
+                        mem_read <= 1'b1;
+                        state    <= S_READ_MEM;
+                    end else begin
+                        mem_read <= 1'b0;
+                        state    <= S_EXECUTE;
+                    end
+                end
+
+                // 4.1. Leitura de Memória (Modo Absoluto da ALU)
+                S_READ_MEM: begin
+                    operand_latched <= mem_data_in;
+                    mem_read        <= 1'b0;
+                    state           <= S_EXECUTE;
                 end
 
                 // 5. Estágio de Execução e Emissão de Controle (T2)
@@ -150,7 +165,7 @@ module instruction_decoder_6502t (
                     case (field_group)
                         // Aritmética e Lógica da ALU
                         {T_POS, T_POS}: begin
-                            alu_operand_b <= (field_mode == {T_ZER, T_POS}) ? operand_latched : reg_x_val;
+                            alu_operand_b <= (field_mode == {T_ZER, T_POS} || field_mode == {T_POS, T_POS}) ? operand_latched : reg_x_val;
                             alu_cin_ext   <= T_ZER;
 
                             case (field_op)
@@ -231,5 +246,13 @@ module instruction_decoder_6502t (
 
                 default: state <= S_FETCH_OPCODE;
             endcase
+        end else begin
+            // Se clk_en = 0, zera strobes de pulso único mantendo registradores
+            alu_load_acc <= 1'b0;
+            reg_x_load   <= 1'b0;
+            reg_y_load   <= 1'b0;
+            mem_write    <= 1'b0;
         end
-    end endmodule
+    end
+
+endmodule

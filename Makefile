@@ -23,6 +23,8 @@ DISASM_TOOL   := $(TOOLS_DIR)/disasm6502t.py
 EMU_TOOL      := $(TOOLS_DIR)/emu6502t.py
 TEST_SUITE    := $(TESTS_DIR)/test_6502t_suite.py
 TEST_EXTENDED := $(TESTS_DIR)/test_6502t_extended.py
+TEST_VAMOS    := $(TESTS_DIR)/test_vamos_compiler.py
+TEST_RTL      := $(TESTS_DIR)/test_rtl_logic.py
 TCL_SCRIPT    := $(SCRIPTS_DIR)/build_bitstream.tcl
 
 # Fontes e Alvos
@@ -39,19 +41,27 @@ DOCKER_IMAGE  := facrf/6502t-web:latest
 DOCKER_NAME   := 6502t_web
 WEB_PORT      := 27005
 
-.PHONY: all test test-all asm disasm emu sim bitstream program clean help web-build web-run
+.PHONY: all test test-all test-vamos test-rtl asm disasm emu sim bitstream program clean help web-build web-run
 
 # Alvo padrão: executa a suite de testes e monta o programa de exemplo
 all: test asm
 
 # ==============================================================================
-# SUITE DE TESTES EM PYTHON (EMULADOR + MONTADOR)
+# SUITE DE TESTES EM PYTHON (EMULADOR + MONTADOR + VAMOS-T + RTL SILÍCIO)
 # ==============================================================================
 test:
 	@echo "===> [TEST] Executando Test Suite Automatizada (6502-T)..."
 	@$(PYTHON) $(TEST_SUITE)
 
-test-all: test
+test-vamos:
+	@echo "===> [TEST-VAMOS] Executando Test Suite VAMOS-T..."
+	@$(PYTHON) $(TEST_VAMOS)
+
+test-rtl:
+	@echo "===> [TEST-RTL] Executando Test Suite de Silício RTL (6502-T)..."
+	@$(PYTHON) $(TEST_RTL)
+
+test-all: test test-vamos test-rtl
 	@echo "===> [TEST-EXTENDED] Executando Test Suite Estendida (6502-T)..."
 	@$(PYTHON) $(TEST_EXTENDED)
 
@@ -75,13 +85,17 @@ emu: asm
 # ==============================================================================
 # SIMULAÇÃO RTL (ICARUS VERILOG)
 # ==============================================================================
-sim: $(BUILD_DIR)/sim.vvp
-	@echo "===> [SIM] Executando simulação de RTL..."
-	@$(VVP) $(BUILD_DIR)/sim.vvp
-
-$(BUILD_DIR)/sim.vvp: $(RTL_SRCS) $(SIM_TB) | $(BUILD_DIR)
-	@echo "===> [SIM-BUILD] Compilando testbench com Icarus Verilog..."
-	@$(IVERILOG) -o $@ -I $(RTL_DIR) $(RTL_SRCS) $(SIM_TB)
+sim: | $(BUILD_DIR)
+	@if command -v $(IVERILOG) >/dev/null 2>&1 && command -v $(VVP) >/dev/null 2>&1; then \
+		echo "===> [SIM-BUILD] Compilando testbench com Icarus Verilog..."; \
+		$(IVERILOG) -o $(BUILD_DIR)/sim.vvp -I $(RTL_DIR) $(RTL_SRCS) $(SIM_TB) && \
+		echo "===> [SIM] Executando simulação de RTL..." && \
+		$(VVP) $(BUILD_DIR)/sim.vvp; \
+	else \
+		echo "[AVISO] 'iverilog' e/ou 'vvp' não encontrados no sistema."; \
+		echo "        Para simulação completa de silício em FPGA, instale: sudo apt install iverilog"; \
+		echo "        A CPU 6502-T e VAMOS-T podem ser validados via software com: make test-all"; \
+	fi
 
 # ==============================================================================
 # SÍNTESE E GERAÇÃO DE BITSTREAM (XILINX VIVADO)
@@ -129,7 +143,8 @@ clean:
 help:
 	@echo "Comandos disponíveis no projeto 6502-T:"
 	@echo "  make test       - Roda a suite automatizada de testes em Python (7/7)"
-	@echo "  make test-all   - Roda a suite padrão e a suite estendida de testes"
+	@echo "  make test-vamos - Roda a suite automatizada do compilador VAMOS-T (7/7)"
+	@echo "  make test-all   - Roda todas as suites (padrão, estendida e VAMOS-T)"
 	@echo "  make asm        - Compila src_asm/program.s para build/program.mem"
 	@echo "  make disasm     - Desassembla o binário build/program.mem"
 	@echo "  make emu        - Inicia o emulador ciclo a ciclo interativo"

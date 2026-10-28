@@ -3,6 +3,7 @@
 module cpu_6502t_debugger (
     input  wire        clk,
     input  wire        rst_n,
+    input  wire        clk_en,
 
     // Interface de Memória Externa
     output wire [19:0] ext_addr_bus,
@@ -39,6 +40,7 @@ module cpu_6502t_debugger (
     cpu_6502t_top u_cpu (
         .clk          (clk),
         .rst_n        (rst_n),
+        .clk_en       (clk_en),
         .addr_bus     (ext_addr_bus),
         .data_in      (ext_data_in),
         .data_out     (ext_data_out),
