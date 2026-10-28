@@ -351,19 +351,26 @@ def main():
     parser = argparse.ArgumentParser(
         description="Montador (Assembler) Avançado para CPU Ternária 6502-T"
     )
-    parser.add_argument("input", nargs="?", default=None, help="Arquivo fonte Assembly (.s ou .asm)")
+    parser.add_argument("input", nargs="?", default=None, help="Arquivo fonte Assembly (.s ou .asm). Use '-' para stdin.")
+    parser.add_argument("-c", "--code", default=None, help="Código assembly passado diretamente como string")
     parser.add_argument("-o", "--output", default=None, help="Arquivo de saída (.mem ou .v)")
     parser.add_argument("-f", "--format", choices=["mem", "verilog"], default="mem", help="Formato de saída (padrão: mem)")
     parser.add_argument("--stack-base", type=int, default=63, help="Endereço base da pilha (padrão: 63)")
     args = parser.parse_args()
 
-    if args.input:
+    src: Optional[str] = None
+    if args.code:
+        src = args.code
+    elif args.input == "-" or (args.input is None and not sys.stdin.isatty()):
+        src = sys.stdin.read()
+    elif args.input:
         if not os.path.exists(args.input):
             print(f"[X] Arquivo não encontrado: {args.input}", file=sys.stderr)
             sys.exit(1)
         with open(args.input, "r", encoding="utf-8") as f:
             src = f.read()
 
+    if src is not None:
         assembler = Assembler6502T(stack_base=args.stack_base)
         assembler.compile(src)
 

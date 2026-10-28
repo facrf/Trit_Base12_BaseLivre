@@ -41,7 +41,7 @@ DOCKER_IMAGE  := facrf/6502t-web:latest
 DOCKER_NAME   := 6502t_web
 WEB_PORT      := 27005
 
-.PHONY: all test test-all test-vamos test-rtl asm disasm emu sim bitstream program clean help web-build web-run
+.PHONY: all test test-all test-vamos test-rtl asm asm-all disasm emu sim bitstream program clean help web-build web-run
 
 # Alvo padrão: executa a suite de testes e monta o programa de exemplo
 all: test asm
@@ -70,7 +70,21 @@ test-all: test test-vamos test-rtl
 # ==============================================================================
 asm: $(MEM_OUTPUT)
 
+asm-all: $(MEM_OUTPUT) $(BUILD_DIR)/fibonacci.mem $(BUILD_DIR)/ternary_logic.mem $(BUILD_DIR)/tty_stream.mem
+
 $(MEM_OUTPUT): $(ASM_INPUT) $(ASM_TOOL) | $(BUILD_DIR)
+	@echo "===> [ASM] Montando $< para $@"
+	@$(PYTHON) $(ASM_TOOL) $< -o $@
+
+$(BUILD_DIR)/fibonacci.mem: $(SRC_ASM)/fibonacci.s $(ASM_TOOL) | $(BUILD_DIR)
+	@echo "===> [ASM] Montando $< para $@"
+	@$(PYTHON) $(ASM_TOOL) $< -o $@
+
+$(BUILD_DIR)/ternary_logic.mem: $(SRC_ASM)/ternary_logic.s $(ASM_TOOL) | $(BUILD_DIR)
+	@echo "===> [ASM] Montando $< para $@"
+	@$(PYTHON) $(ASM_TOOL) $< -o $@
+
+$(BUILD_DIR)/tty_stream.mem: $(SRC_ASM)/tty_stream.s $(ASM_TOOL) | $(BUILD_DIR)
 	@echo "===> [ASM] Montando $< para $@"
 	@$(PYTHON) $(ASM_TOOL) $< -o $@
 

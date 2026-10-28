@@ -280,17 +280,22 @@ def main():
     parser = argparse.ArgumentParser(
         description="Desassemblador (Disassembler) para a CPU Ternária 6502-T"
     )
-    parser.add_argument("file", nargs="?", default=None, help="Arquivo de entrada (.mem, .v, .hex contendo palavras de 12 bits)")
+    parser.add_argument("file", nargs="?", default=None, help="Arquivo de entrada (.mem, .v, .hex contendo palavras de 12 bits). Use '-' para stdin.")
     parser.add_argument("-c", "--clean", action="store_true", help="Emite código Assembly limpo re-compilável (sem listagem/endereços)")
     args = parser.parse_args()
 
     disasm = Disassembler6502T()
-    if args.file:
+    content: Optional[str] = None
+    if args.file == "-" or (args.file is None and not sys.stdin.isatty()):
+        content = sys.stdin.read()
+    elif args.file:
         if not os.path.exists(args.file):
             print(f"[X] Arquivo não encontrado: {args.file}", file=sys.stderr)
             sys.exit(1)
         with open(args.file, "r", encoding="utf-8") as f:
             content = f.read()
+
+    if content is not None:
         print(disasm.disassemble(content, clean=args.clean))
     else:
         # Teste com os vetores de demonstração
