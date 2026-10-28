@@ -308,17 +308,18 @@
       const presets = {
         ola: "pacote principal\n\n// Exemplo VAMOS-T: Olá Mundo na CPU Ternária 6502-T\n// Emite cada caractere via MMIO (Porta 300 / 0z210) no Barramento de 6 Trits\nfuncao principal() {\n    escrever(\"Olá Mundo!\\n\")\n    parar()\n}",
         calc: "pacote principal\n\n// Exemplo VAMOS-T: Calculadora Duodecimal (Base 12) no 6502-T\n// Demonstra soma e subtração com literais duodecimais 0z...\nfuncao principal() {\n    // 0z010 = 12 em decimal, 0z005 = 5 em decimal\n    num1 := 0z010\n    num2 := 0z005\n\n    // Soma: 12 + 5 = 17 (em base 12: 0z015)\n    soma := num1 + num2\n\n    // Subtração: 17 - 8 = 9 (0z009)\n    resultado := soma - 0z008\n\n    A = resultado\n    escrever(\"Calc Base 12: OK!\\n\")\n    parar()\n}",
-        trit: "pacote principal\n\n// Exemplo VAMOS-T: Lógica Ternária Balanceada {-1, 0, +1}\n// Demonstra negação unária simétrica e flags de sinal\nfuncao principal() {\n    // Carrega um valor positivo (+50 decimal / 0z042)\n    valor := 0z042\n\n    // Inversão simétrica sem complemento de dois!\n    invertido := 0 - valor\n\n    A = invertido\n    escrever(\"Trit Balanceado Simetrico!\\n\")\n    parar()\n}",
+        trit: "pacote principal\n\n// Exemplo VAMOS-T: Lógica Ternária Balanceada {-1, 0, +1}\n// Demonstra negação unária simétrica nativa (NEG) e flags de sinal\nfuncao principal() {\n    // Carrega um valor positivo (+50 decimal / 0z042)\n    valor := 0z042\n\n    // Inversão simétrica nativa via instrução NEG em hardware!\n    invertido := -valor\n\n    A = invertido\n    escrever(\"Trit Balanceado Simétrico!\\n\")\n    parar()\n}",
         loop: "pacote principal\n\n// Exemplo VAMOS-T: Loop de Contagem e Acúmulo no 6502-T\nfuncao principal() {\n    limite := 5\n    total := 0\n    i := 0\n\n    para i < limite {\n        total = total + i\n        i = i + 1\n    }\n\n    A = total\n    parar()\n}",
         cond: "pacote principal\n\n// Exemplo VAMOS-T: Lógica Condicional e Flags Ternárias\nfuncao principal() {\n    alvo := -12\n    status := 0\n\n    se alvo < 0 {\n        status = -1\n    } senao {\n        status = 1\n    }\n\n    A = status\n    parar()\n}",
         mult: "pacote principal\n\n// Exemplo VAMOS-T: Multiplicação Aritmética por Acúmulo no 6502-T\n// Multiplica a (4) por b (3) = 12 (0z010 em base 12)\nfuncao principal() {\n    a := 4\n    b := 3\n    produto := 0\n\n    para b > 0 {\n        produto = produto + a\n        b = b - 1\n    }\n\n    A = produto\n    escrever(\"Mult OK!\\n\")\n    parar()\n}",
+        fib: "pacote principal\n\n// Exemplo VAMOS-T: Sequência de Fibonacci na CPU 6502-T\n// Computa termos progressivos usando registradores e memória balanceada\nfuncao principal() {\n    const termos = 6\n    fn2 := 0\n    fn1 := 1\n    i := 0\n\n    para i < termos {\n        proximo := fn2 + fn1\n        fn2 = fn1\n        fn1 = proximo\n        i++\n    }\n\n    escrever(\"Fibonacci 6502-T OK!\\n\")\n    A = fn1 // Termo F(7) = +13 (+0z011)\n    parar()\n}",
         olamindo: "pacote principal\n\n// Exemplo VAMOS-T: olá mindo! (Solicitação literal)\nfuncao principal() {\n    escrever(\"olá mindo!\\n\")\n    parar()\n}"
       };
 
       const challenges = {
         1: {
           title: "Inversor Simétrico Sem Multiplicação",
-          code: "pacote principal\n\n// DESAFIO 1: Inversor Simétrico Sem Multiplicação\n// Obtenha o inverso simétrico de 'entrada' na variável 'saida' e no Acumulador A.\nfuncao principal() {\n    entrada := 0z042 // +50 decimal\n    \n    // Seu código aqui (inversão simétrica 0 - entrada):\n    saida := 0 - entrada\n    \n    A = saida\n    parar()\n}",
+          code: "pacote principal\n\n// DESAFIO 1: Inversor Simétrico Sem Multiplicação\n// Obtenha o inverso simétrico de 'entrada' na variável 'saida' e no Acumulador A.\nfuncao principal() {\n    entrada := 0z042 // +50 decimal\n    \n    // Seu código aqui (inversão unária simétrica direta: -entrada):\n    saida := -entrada\n    \n    A = saida\n    parar()\n}",
           validator: (exec) => {
             const v = exec.variables || {};
             if (v.saida && v.saida.decimal === -50 && exec.acc === -50) {

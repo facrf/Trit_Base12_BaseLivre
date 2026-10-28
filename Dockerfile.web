@@ -23,8 +23,12 @@ COPY --from=builder /bin/6502t-web /app/6502t-web
 COPY tools/ /app/tools/
 COPY src_asm/ /app/src_asm/
 
-# Monta o programa binário .mem internamente garantindo independência de artefatos locais
-RUN mkdir -p /app/build && python3 /app/tools/asm6502t.py /app/src_asm/program.s -o /app/build/program.mem
+# Monta os programas binários .mem internamente garantindo independência de artefatos locais
+RUN mkdir -p /app/build && \
+    python3 /app/tools/asm6502t.py /app/src_asm/program.s -o /app/build/program.mem && \
+    python3 /app/tools/asm6502t.py /app/src_asm/fibonacci.s -o /app/build/fibonacci.mem && \
+    python3 /app/tools/asm6502t.py /app/src_asm/ternary_logic.s -o /app/build/ternary_logic.mem && \
+    python3 /app/tools/asm6502t.py /app/src_asm/tty_stream.s -o /app/build/tty_stream.mem
 
 # Porta do serviço web
 EXPOSE 27005
