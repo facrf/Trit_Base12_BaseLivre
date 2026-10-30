@@ -38,10 +38,11 @@ SIM_TB        := sim/tb_system_dozenal_monitor.v
 
 # Configurações Docker Web
 DOCKER_IMAGE  := facrf/6502t-web:latest
+GHCR_IMAGE    := ghcr.io/facrf/6502t-web:latest
 DOCKER_NAME   := 6502t_web
 WEB_PORT      := 27005
 
-.PHONY: all test test-all test-vamos test-rtl asm asm-all disasm emu sim bitstream program clean help web-build web-run
+.PHONY: all test test-all test-vamos test-rtl asm asm-all disasm emu sim bitstream program clean help web-build web-run ghcr-push
 
 # Alvo padrão: executa a suite de testes e monta o programa de exemplo
 all: test asm
@@ -143,6 +144,14 @@ web-run:
 	@echo "===> [DOCKER] Subindo container $(DOCKER_NAME)..."
 	@docker rm -f $(DOCKER_NAME) 2>/dev/null || true
 	docker run -d --name $(DOCKER_NAME) -p $(WEB_PORT):$(WEB_PORT) $(DOCKER_IMAGE)
+
+ghcr-push: asm
+	@echo "===> [GHCR] Compilando e publicando multi-arch (linux/amd64,linux/arm64,linux/riscv64) para $(GHCR_IMAGE)..."
+	docker buildx build \
+	  --platform linux/amd64,linux/arm64,linux/riscv64 \
+	  -f Dockerfile.web \
+	  -t $(GHCR_IMAGE) \
+	  --push .
 
 # ==============================================================================
 # DIRETÓRIOS E LIMPEZA

@@ -16,6 +16,9 @@ FROM python:3.12-alpine
 
 WORKDIR /app
 
+# Cria usuário e grupo não-root para execução segura do container
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 # Copia binário compilado no stage builder
 COPY --from=builder /bin/6502t-web /app/6502t-web
 
@@ -24,11 +27,15 @@ COPY tools/ /app/tools/
 COPY src_asm/ /app/src_asm/
 
 # Monta os programas binários .mem internamente garantindo independência de artefatos locais
+# e transfere posse para o usuário sem privilégios
 RUN mkdir -p /app/build && \
     python3 /app/tools/asm6502t.py /app/src_asm/program.s -o /app/build/program.mem && \
     python3 /app/tools/asm6502t.py /app/src_asm/fibonacci.s -o /app/build/fibonacci.mem && \
     python3 /app/tools/asm6502t.py /app/src_asm/ternary_logic.s -o /app/build/ternary_logic.mem && \
-    python3 /app/tools/asm6502t.py /app/src_asm/tty_stream.s -o /app/build/tty_stream.mem
+    python3 /app/tools/asm6502t.py /app/src_asm/tty_stream.s -o /app/build/tty_stream.mem && \
+    chown -R appuser:appgroup /app
+
+USER appuser
 
 # Porta do serviço web
 EXPOSE 27005

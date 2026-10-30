@@ -335,6 +335,32 @@ make web-run
 
 Acesse no navegador: **`http://localhost:27005`**
 
+#### Deploy com Docker Compose / Portainer (Stack)
+
+Para implantar via **Portainer** (seção *Stacks* ➔ *Add stack*) ou via `docker compose` em qualquer arquitetura — **PC (x86_64 / AMD64)**, **Raspberry Pi (ARM64)** ou **RISC-V (riscv64)** —, utilize a imagem multi-arch oficial no **GHCR** com a definição YAML abaixo:
+
+```yaml
+version: "3.8"
+
+services:
+  6502t-web:
+    image: ghcr.io/facrf/6502t-web:latest # Imagem multi-arch oficial (AMD64, ARM64 e RISCV64 automático)
+    container_name: 6502t_web
+    restart: unless-stopped
+    ports:
+      - "27005:27005"
+    environment:
+      - PORT=27005
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 256M
+```
+
+> [!TIP]
+> Em ambientes offline ou sem acesso externo à registry, você também pode importar localmente os pacotes gerados com `docker load -i 6502t-web.tar.gz` (ou `6502t-web-arm64.tar.gz` no Raspberry Pi). O Portainer detectará e utilizará a imagem já presente no cache do Docker local.
+
 ### 5.5. Compilador e Laboratório de Programação VAMOS-T
 
 O 6502-T integra um compilador e transpiler para a linguagem **VAMOS-LANG** ([facrf/VAMOSLANG](https://github.com/facrf/VAMOSLANG)), uma linguagem com sintaxe no estilo Go em português brasileiro adaptada para o conjunto de instruções ternário balanceado e barramentos de 6 trits.

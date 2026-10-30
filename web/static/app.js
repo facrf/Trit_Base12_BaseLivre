@@ -249,27 +249,32 @@
       const tabManual = document.getElementById('tab-manual');
       const tabChallenges = document.getElementById('tab-challenges');
       const tabTerminal = document.getElementById('tab-terminal');
+      const tabAbout = document.getElementById('tab-about');
       const viewVamos = document.getElementById('view-vamos');
       const viewManual = document.getElementById('view-manual');
       const viewChallenges = document.getElementById('view-challenges');
       const viewTerminal = document.getElementById('view-terminal');
+      const viewAbout = document.getElementById('view-about');
 
       function switchTab(target) {
         tabVamos.classList.toggle('active', target === 'vamos');
         tabManual.classList.toggle('active', target === 'manual');
         if (tabChallenges) tabChallenges.classList.toggle('active', target === 'challenges');
         tabTerminal.classList.toggle('active', target === 'terminal');
+        if (tabAbout) tabAbout.classList.toggle('active', target === 'about');
 
         viewVamos.style.display = (target === 'vamos') ? 'block' : 'none';
         viewManual.style.display = (target === 'manual') ? 'block' : 'none';
         if (viewChallenges) viewChallenges.style.display = (target === 'challenges') ? 'block' : 'none';
         viewTerminal.style.display = (target === 'terminal') ? 'block' : 'none';
+        if (viewAbout) viewAbout.style.display = (target === 'about') ? 'block' : 'none';
       }
 
       tabVamos.addEventListener('click', () => switchTab('vamos'));
       tabManual.addEventListener('click', () => switchTab('manual'));
       if (tabChallenges) tabChallenges.addEventListener('click', () => switchTab('challenges'));
       tabTerminal.addEventListener('click', () => switchTab('terminal'));
+      if (tabAbout) tabAbout.addEventListener('click', () => switchTab('about'));
 
       // VAMOS-LANG Playground & Visualizer
       const vamosCode = document.getElementById('vamos-code');

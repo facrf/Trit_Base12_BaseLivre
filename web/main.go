@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"embed"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -216,22 +218,27 @@ type SessionEntry struct {
 }
 
 type SessionManager struct {
-	mu         sync.RWMutex
-	sessions   map[string]*SessionEntry
-	scriptPath string
-	defaultMem string
-	sessionDir string
-	maxAge     time.Duration
+	mu          sync.RWMutex
+	sessions    map[string]*SessionEntry
+	scriptPath  string
+	defaultMem  string
+	sessionDir  string
+	maxAge      time.Duration
+	maxSessions int
 }
 
-func NewSessionManager(scriptPath, defaultMem, sessionDir string, maxAge time.Duration) *SessionManager {
+func NewSessionManager(scriptPath, defaultMem, sessionDir string, maxAge time.Duration, maxSessions int) *SessionManager {
 	_ = os.MkdirAll(sessionDir, 0755)
+	if maxSessions <= 0 {
+		maxSessions = 30
+	}
 	sm := &SessionManager{
-		sessions:   make(map[string]*SessionEntry),
-		scriptPath: scriptPath,
-		defaultMem: defaultMem,
-		sessionDir: sessionDir,
-		maxAge:     maxAge,
+		sessions:    make(map[string]*SessionEntry),
+		scriptPath:  scriptPath,
+		defaultMem:  defaultMem,
+		sessionDir:  sessionDir,
+		maxAge:      maxAge,
+		maxSessions: maxSessions,
 	}
 
 	// Inicializa a sessão padrão global ("default")
@@ -304,6 +311,31 @@ func (sm *SessionManager) GetOrCreate(r *http.Request, w http.ResponseWriter) *S
 	if entry, ok := sm.sessions[sessionID]; ok {
 		entry.LastAccess = time.Now()
 		return entry
+	}
+
+	// Proteção contra esgotamento de memória/processos: expurga sessão LRU se atingir o teto
+	if len(sm.sessions) >= sm.maxSessions {
+		var oldestID string
+		var oldestTime time.Time
+		for id, entry := range sm.sessions {
+			if id == "default" {
+				continue
+			}
+			if oldestID == "" || entry.LastAccess.Before(oldestTime) {
+				oldestID = id
+				oldestTime = entry.LastAccess
+			}
+		}
+		if oldestID != "" {
+			if oldEntry, ok := sm.sessions[oldestID]; ok {
+				oldEntry.Emu.Kill()
+				if oldEntry.MemPath != "" && oldEntry.MemPath != sm.defaultMem {
+					_ = os.Remove(oldEntry.MemPath)
+				}
+				delete(sm.sessions, oldestID)
+				log.Printf("[SESSION] Limite máximo de sessões simultâneas (%d) atingido. Sessão antiga expurgada: %s", sm.maxSessions, oldestID)
+			}
+		}
 	}
 
 	// Criação de nova sessão com arquivo de memória isolado
@@ -450,15 +482,23 @@ func (s *Server) handleVamos(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = os.MkdirAll(filepath.Dir(outMem), 0755)
 
-	cmd := exec.Command("python3", vamosScript, "--json", "-o", outMem)
+	// Timeout de 10s para compilação/execução defensiva contra travamentos
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "python3", vamosScript, "--json", "-o", outMem)
 	cmd.Stdin = strings.NewReader(source)
 	outBytes, err := cmd.CombinedOutput()
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusBadRequest)
+		errMsg := string(outBytes)
+		if ctx.Err() == context.DeadlineExceeded {
+			errMsg = "Tempo limite esgotado durante a compilação/execução (máx 10s)."
+		}
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
-			"error":   fmt.Sprintf("Falha de compilação VAMOS-T: %s (%v)", string(outBytes), err),
+			"error":   fmt.Sprintf("Falha de compilação VAMOS-T: %s (%v)", errMsg, err),
 		})
 		return
 	}
@@ -514,10 +554,36 @@ type RateLimiter struct {
 }
 
 func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
-	return &RateLimiter{
+	rl := &RateLimiter{
 		requests: make(map[string][]time.Time),
 		limit:    limit,
 		window:   window,
+	}
+	// Ticker para purga periódica de IPs inativos (prevenção de vazamento de memória)
+	go rl.reapLoop(5 * time.Minute)
+	return rl
+}
+
+func (rl *RateLimiter) reapLoop(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	for range ticker.C {
+		rl.mu.Lock()
+		now := time.Now()
+		cutoff := now.Add(-rl.window)
+		for ip, times := range rl.requests {
+			var valid []time.Time
+			for _, t := range times {
+				if t.After(cutoff) {
+					valid = append(valid, t)
+				}
+			}
+			if len(valid) == 0 {
+				delete(rl.requests, ip)
+			} else {
+				rl.requests[ip] = valid
+			}
+		}
+		rl.mu.Unlock()
 	}
 }
 
@@ -618,8 +684,16 @@ func main() {
 	log.Printf("[INIT] Emulador Script: %s", emuScript)
 	log.Printf("[INIT] Arquivo Memória: %s", memFile)
 
+	maxSessions := 30
+	if msStr := os.Getenv("MAX_SESSIONS"); msStr != "" {
+		if val, err := strconv.Atoi(msStr); err == nil && val > 0 {
+			maxSessions = val
+		}
+	}
+	log.Printf("[INIT] Teto máximo de sessões simultâneas: %d", maxSessions)
+
 	sessionDir := filepath.Join(filepath.Dir(memFile), "sessions")
-	sessions := NewSessionManager(emuScript, memFile, sessionDir, 15*time.Minute)
+	sessions := NewSessionManager(emuScript, memFile, sessionDir, 15*time.Minute, maxSessions)
 	server := &Server{sessions: sessions}
 
 	mux := http.NewServeMux()

@@ -37,6 +37,7 @@
     <button class="nav-tab" id="tab-manual">📖 Manual &amp; Exemplos</button>
     <button class="nav-tab" id="tab-challenges">🏆 Desafios Interativos <span style="font-size: 10px; background: var(--accent-green); color: var(--bg-darker); padding: 1px 6px; border-radius: 10px; font-weight: 700;">QUIZ</span></button>
     <button class="nav-tab" id="tab-terminal">💻 Terminal &amp; Telemetria</button>
+    <button class="nav-tab" id="tab-about">ℹ️ Autoria &amp; Docs</button>
   </nav>
 
   <!-- Main Content Area -->
@@ -573,6 +574,86 @@ para b > 0 {
         </div>
       </div>
     </div>
+
+    <!-- Tab 5: About & Documentation View -->
+    <div id="view-about" style="display: none;">
+      <div class="manual-header">
+        <h2 style="color: var(--accent-cyan); font-size: 18px;">ℹ️ Autoria, Pesquisa &amp; Ecossistema de Hardware Aberto</h2>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-top: 6px; line-height: 1.6;">
+          O projeto <strong>6502-T</strong> é uma pesquisa e implementação experimental de arquitetura de computadores aberta, unindo a clássica microarquitetura MOS 6502 à lógica ternária balanceada {-1, 0, +1} em silício e abstração duodecimal (base 12).
+        </p>
+      </div>
+
+      <div class="manual-grid" style="margin-top: 18px;">
+        <!-- Card 1: Autor & Pesquisador -->
+        <div class="manual-card">
+          <div class="manual-card-title">
+            <span>👤 Autoria &amp; Concepção</span>
+            <span class="badge" style="font-size: 11px; color: var(--accent-cyan); border-color: var(--accent-cyan);">Criador</span>
+          </div>
+          <p>
+            Desenvolvido por <strong>Fabiano Augusto Cesar da Rocha Filho</strong> e colaboradores. Pesquisa voltada para arquitetura ternária balanceada, lógica de três estados em transistores BJT push-pull e computação não-booleana de alto rendimento energético (constante de Euler <em>e</em>).
+          </p>
+          <div style="margin-top: auto; padding-top: 12px;">
+            <a href="https://fabianocesar.com/" target="_blank" rel="noopener noreferrer" class="btn btn-step" style="text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+              <span>🌐 fabianocesar.com</span>
+              <span style="font-size: 10px; opacity: 0.8;">↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Card 2: Repositório 6502-T -->
+        <div class="manual-card">
+          <div class="manual-card-title">
+            <span>⚡ CPU 6502-T (Trit &amp; Base 12)</span>
+            <span class="badge" style="font-size: 11px; color: var(--accent-purple); border-color: var(--accent-purple);">Hardware Aberto</span>
+          </div>
+          <p>
+            Repositório com a implementação completa em <strong>Verilog sintetizável (FPGA Artix-7 Basys 3)</strong>, unidade lógica e aritmética ternária (ALU de 6 trits), barramento de endereços de 10 trits (59.049 palavras), emulador ciclo a ciclo, assembler e testbenches.
+          </p>
+          <div style="margin-top: auto; padding-top: 12px;">
+            <a href="https://github.com/facrf/Trit_Base12_BaseLivre" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+              <span>📦 GitHub: Trit_Base12_BaseLivre</span>
+              <span style="font-size: 10px; opacity: 0.8;">↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Card 3: Linguagem VAMOS-LANG -->
+        <div class="manual-card">
+          <div class="manual-card-title">
+            <span>🔤 Linguagem VAMOS-LANG</span>
+            <span class="badge" style="font-size: 11px; color: var(--accent-green); border-color: var(--accent-green);">Compilador</span>
+          </div>
+          <p>
+            Linguagem de programação procedural com sintaxe em português brasileiro inspirada em Go. Inclui compilador nativo para a CPU ternária balanceada com suporte a literais duodecimais (<code>0z...</code>), MMIO na porta 300 e telemetria estruturada.
+          </p>
+          <div style="margin-top: auto; padding-top: 12px;">
+            <a href="https://github.com/facrf/VAMOSLANG" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+              <span>📦 GitHub: VAMOSLANG</span>
+              <span style="font-size: 10px; opacity: 0.8;">↗</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Card 4: Documentação Técnica & Licença -->
+        <div class="manual-card">
+          <div class="manual-card-title">
+            <span>📚 Documentação &amp; Licença</span>
+            <span class="badge" style="font-size: 11px; color: var(--accent-orange); border-color: var(--accent-orange);">GPLv3</span>
+          </div>
+          <p>
+            O projeto é disponibilizado sob a licença <strong>GNU General Public License v3.0 (GPLv3)</strong>, garantindo liberdade total de estudo, modificação e distribuição com código aberto.
+          </p>
+          <ul style="margin-left: 18px; margin-top: 6px; font-size: 12px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px;">
+            <li><code>docs/especificacao_completa.md</code> — ISA, FSM e barramentos</li>
+            <li><code>docs/base_conceitual.md</code> — Teoria da informação e radix <em>e</em></li>
+            <li><code>docs/manual_vamos_lang.md</code> — Referência da linguagem</li>
+            <li><code>docs/tese_antitese.md</code> — Confronto binário vs. ternário</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   </main>
 
   <!-- Technical Footer -->
@@ -582,8 +663,11 @@ para b > 0 {
       <span>Barramento Endereço: <strong class="footer-highlight">10 trits</strong> (59.049 palavras)</span>
       <span>Aritmética: <strong style="color:var(--accent-purple)">Duodecimal (Base 12)</strong></span>
     </div>
-    <div>
-      <span>MOS 6502 Ternário Balanceado &copy; Fabiano Augusto Cesar da Rocha Filho</span>
+    <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+      <a href="https://fabianocesar.com/" target="_blank" rel="noopener noreferrer" style="color: var(--accent-cyan); text-decoration: none; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">🌐 fabianocesar.com</a>
+      <a href="https://github.com/facrf/Trit_Base12_BaseLivre" target="_blank" rel="noopener noreferrer" style="color: var(--text-secondary); text-decoration: none; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">📦 6502-T</a>
+      <a href="https://github.com/facrf/VAMOSLANG" target="_blank" rel="noopener noreferrer" style="color: var(--text-secondary); text-decoration: none; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">📦 VAMOS-LANG</a>
+      <span style="font-size: 12px;">&copy; Fabiano Augusto Cesar da Rocha Filho</span>
     </div>
   </footer>
 
