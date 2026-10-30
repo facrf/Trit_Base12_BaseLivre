@@ -39,10 +39,11 @@ SIM_TB        := sim/tb_system_dozenal_monitor.v
 # Configurações Docker Web
 DOCKER_IMAGE  := facrf/6502t-web:latest
 GHCR_IMAGE    := ghcr.io/facrf/6502t-web:latest
+GITLAB_IMAGE  := registry.gitlab.com/facrf/trit_base12_baselivre:latest
 DOCKER_NAME   := 6502t_web
 WEB_PORT      := 27005
 
-.PHONY: all test test-all test-vamos test-rtl asm asm-all disasm emu sim bitstream program clean help web-build web-run ghcr-push
+.PHONY: all test test-all test-vamos test-rtl asm asm-all disasm emu sim bitstream program clean help web-build web-run ghcr-push gitlab-push publish-all
 
 # Alvo padrão: executa a suite de testes e monta o programa de exemplo
 all: test asm
@@ -153,6 +154,16 @@ ghcr-push: asm
 	  -t $(GHCR_IMAGE) \
 	  --push .
 
+gitlab-push: asm
+	@echo "===> [GITLAB] Compilando e publicando multi-arch (linux/amd64,linux/arm64,linux/riscv64) para $(GITLAB_IMAGE)..."
+	docker buildx build \
+	  --platform linux/amd64,linux/arm64,linux/riscv64 \
+	  -f Dockerfile.web \
+	  -t $(GITLAB_IMAGE) \
+	  --push .
+
+publish-all: ghcr-push gitlab-push
+
 # ==============================================================================
 # DIRETÓRIOS E LIMPEZA
 # ==============================================================================
@@ -173,6 +184,8 @@ help:
 	@echo "  make emu        - Inicia o emulador ciclo a ciclo interativo"
 	@echo "  make web-build  - Constrói imagem Docker facrf/6502t-web:latest"
 	@echo "  make web-run    - Executa container Docker na porta 27005"
+	@echo "  make ghcr-push  - Publica imagem multi-arch (amd64, arm64, riscv64) no GHCR"
+	@echo "  make gitlab-push- Publica imagem multi-arch no GitLab Container Registry"
 	@echo "  make sim        - Compila e roda o testbench RTL no Icarus Verilog"
 	@echo "  make bitstream  - Executa síntese, place, route e gera .bit no Vivado"
 	@echo "  make program    - Grava o bitstream diretamente na FPGA via JTAG"

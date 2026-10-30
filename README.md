@@ -337,14 +337,18 @@ Acesse no navegador: **`http://localhost:27005`**
 
 #### Deploy com Docker Compose / Portainer (Stack)
 
-Para implantar via **Portainer** (seção *Stacks* ➔ *Add stack*) ou via `docker compose` em qualquer arquitetura — **PC (x86_64 / AMD64)**, **Raspberry Pi (ARM64)** ou **RISC-V (riscv64)** —, utilize a imagem multi-arch oficial no **GHCR** com a definição YAML abaixo:
+Para implantar via **Portainer** (seção *Stacks* ➔ *Add stack*) ou via `docker compose` em qualquer arquitetura — **PC (x86_64 / AMD64)**, **Raspberry Pi (ARM64)** ou **RISC-V (riscv64)** —, utilize as imagens multi-arch oficiais publicadas continuamente via espelhamento Git nos registries:
+
+* **GitHub Packages (GHCR):** `ghcr.io/facrf/6502t-web:latest`
+* **GitLab Container Registry:** `registry.gitlab.com/facrf/trit_base12_baselivre:latest`
 
 ```yaml
 version: "3.8"
 
 services:
   6502t-web:
-    image: ghcr.io/facrf/6502t-web:latest # Imagem multi-arch oficial (AMD64, ARM64 e RISCV64 automático)
+    image: ghcr.io/facrf/6502t-web:latest # Imagem multi-arch oficial (AMD64, ARM64 e RISCV64)
+    # Alternativa no GitLab: registry.gitlab.com/facrf/trit_base12_baselivre:latest
     container_name: 6502t_web
     restart: unless-stopped
     ports:
